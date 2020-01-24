@@ -54,13 +54,13 @@ def commandControl(data):
         print("Data should be send direct to Aduit Server: " + data)
         auditServerSocket.send(data + ', 1')
         return data
-    else if dataList[1] == 'BUY':
+    elif dataList[1] == 'BUY':
         auditServerSocket.send(data + ', 1')
         newdata = dataList[3]+ ', ' + dataList[2] + '\r'
         dataFromQuote = sendToQuote(newdata)
         auditServerSocket.send(data + ', ' + dataFromQuote + ', 4')
         return dataFromQuote
-    else if dataList[1] == "SELL":
+    elif dataList[1] == "SELL":
         auditServerSocket.send(data + ', 1')
         newdata = dataList[3]+ ', ' + dataList[2] + '\r'
         return dataFromQuote

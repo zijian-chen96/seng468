@@ -170,13 +170,13 @@ def errorMessageChild(parent, data):
 
 def detTag(data): #determine the tag of the input
     tag = ''
-    if data[-1] = 1:
+    if data[-1] == '1':
         userCommandChildren(data)
-    else if typ = 2:
+    elif typ == '2':
         tag = "accountTransaction"
-    else if typ = 3:
+    elif typ == '3':
         tag = "systemEvent"
-    else if data[-1] = 4:
+    elif data[-1] == '4':
         quoteServerChildren(data)
     else:
         tag = "errorEvent"
