@@ -3,7 +3,7 @@ import sys
 from xml.dom import minidom
 from datetime import datetime
 
-def main():
+def main(root):
     sSocket = socket(AF_INET, SOCK_STREAM)
     print 'this is the audit server'
 
@@ -17,16 +17,19 @@ def main():
         while True:
             transactions = ""
             transactions = connection.recv(1024)
-            transactionsList = transactions.split(', ')
+            transactionsList = transactions.split(',')
+            print(transactionsList, "calling detTage")
 
-            tag = detTag(transactionsList)
+
             #tolog(tag, transactions[1])
 
             if transactions:
-                print(transactions)
+                detTag(transactionsList)
+                #print(transactions)
             else: ##empty / no transactions received
                 break
 
+        #print("Yhea man")
         xml_str = root.toprettyxml(indent='\t')
 
         save_path_file = "testxmlfile.xml"
@@ -42,9 +45,12 @@ def main():
 
 def userCommandChildren(data): #[transNum, command, username, funds, types]
     #dataList = data.split(',')
-
+    #print "userCommandChild = root.createElement('userCommand')"
     userCommandChild = root.createElement('userCommand')
+    #print "worked"
+    #print "xml.appendChild(userCommandChild)"
     xml.appendChild(userCommandChild)
+    #print "worked"
 
     timestampChild(userCommandChild, getCurrTimestamp())
     serverChild(userCommandChild, "CLT1")
@@ -52,6 +58,7 @@ def userCommandChildren(data): #[transNum, command, username, funds, types]
     commandChild(userCommandChild, data[1])
     usernameChild(userCommandChild, data[2])
     fundsChild(userCommandChild, data[3])
+    print "everything went through"
 
 def accountTransactionChildren(data):
 
@@ -64,6 +71,7 @@ def accountTransactionChildren(data):
     actionChild(accountTransactionChild, data)
     usernameChild(accountTransactionChild, data)
     fundsChild(accountTransactionChild, data)
+    print "everything went through"
 
 def systemEventChildren(data):
 
@@ -92,6 +100,7 @@ def quoteServerChildren(data): #[transNum, command, username, stack, funds, pric
     stockSymbolChild(qouteServerChild, data[3])
     priceChild(qouteServerChild, data[5])
     cryptokeyChild(qouteServerChild, data[9])
+    print "everything went through"
 
 def errorEventChildren(data):
 
@@ -109,6 +118,7 @@ def errorEventChildren(data):
 
 
 def timestampChild(parent, data):
+    #print "timestampChild"
     timestampChild = root.createElement('timestamp')
     timestampChild.appendChild(root.createTextNode(data))
     parent.appendChild(timestampChild)
@@ -171,10 +181,12 @@ def errorMessageChild(parent, data):
 def detTag(data): #determine the tag of the input
     tag = ''
     if data[-1] == '1':
+        #print "calling userCommandChildren"
         userCommandChildren(data)
-    elif typ == '2':
+    elif data[-1] == '2':
+        #print " calling accountTransaction"
         tag = "accountTransaction"
-    elif typ == '3':
+    elif data[-1] == '3':
         tag = "systemEvent"
     elif data[-1] == '4':
         quoteServerChildren(data)
@@ -186,10 +198,10 @@ def getCurrTimestamp():
     #print(dateTimeObj)
 
     timestampStr = dateTimeObj.strptime(str(dateTimeObj), '%Y-%m-%d %H:%M:%S.%f').strftime('%s.%f')
-    return int(float(timestampStr) * 1000)
+    return str(int(float(timestampStr) * 1000))
 
 if __name__=="__main__":
     root = minidom.Document()
     xml = root.createElement('log')
     root.appendChild(xml)
-    main()
+    main(root)
