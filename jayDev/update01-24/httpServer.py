@@ -19,8 +19,8 @@ def sendToTrans(alist):
     transNum = 0
     for i in alist:
         transNum += 1
-        
-        s.send(i + ', ' + str(transNum)
+
+        s.send(str(transNum) + ',' + i)
         print(i)
         data = s.recv(1024)
         if data:
