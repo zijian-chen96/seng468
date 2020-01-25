@@ -2,7 +2,16 @@ from socket import *
 import sys
 
 def recvFromHttp():
+    serverSocket = socket(AF_INET, SOCK_STREAM)
+    host = ''
+    port = 44431
 
+    serverSocket.bind((host,port))
+
+    serverSocket.listen(5)
+
+    s = socket(AF_INET, SOCK_STREAM)
+    s.connect(("192.168.1.188",44430))
 
     while True:
         print('Waitting for Connection...')
@@ -21,7 +30,7 @@ def recvFromHttp():
                     #dataFromQuote = sendToQuote(data + '\r')
                     print("Data recv from Quote Server: " + dataFromQuote)
                     connectSocket.send(dataFromQuote) #Send back to HTTP Server
-                    #auditServerSocket.send(dataFromQuote) #Send to Aduit Server
+                    s.send(dataFromQuote) #Send to Aduit Server
 
                 else:
                     break
@@ -50,19 +59,12 @@ def sendToQuote(data):
 def commandControl(data):
     dataList = data.split(', ')
 
-    if dataList[1] == "ADD":
+    if dataList[0] == "ADD":
         print("Data should be send direct to Aduit Server: " + data)
-        auditServerSocket.send(data + ', 1')
         return data
-    elif dataList[1] == 'BUY':
-        auditServerSocket.send(data + ', 1')
-        newdata = dataList[3]+ ', ' + dataList[2] + '\r'
+    else:
+        newdata = dataList[2]+ ', ' + dataList[1] + '\r'
         dataFromQuote = sendToQuote(newdata)
-        auditServerSocket.send(data + ', ' + dataFromQuote + ', 4')
-        return dataFromQuote
-    elif dataList[1] == "SELL":
-        auditServerSocket.send(data + ', 1')
-        newdata = dataList[3]+ ', ' + dataList[2] + '\r'
         return dataFromQuote
 
 def main():
@@ -70,15 +72,4 @@ def main():
     #commandControl("ADD, jiosesdo, 100.00")
 
 if __name__ == '__main__':
-    serverSocket = socket(AF_INET, SOCK_STREAM)
-    host = ''
-    port = 44431
-
-    serverSocket.bind((host,port))
-
-    serverSocket.listen(5)
-
-    auditServerSocket = socket(AF_INET, SOCK_STREAM)
-    auditServerSocket.connect(("192.168.1.188",44430))
-
     main()
