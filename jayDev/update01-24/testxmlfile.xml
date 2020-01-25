@@ -1,48 +1,68 @@
 <?xml version="1.0" ?>
 <log>
 	<userCommand>
-		<timestamp>12121212,abcabc</timestamp>
-		<server>12121212,abcabc</server>
-		<transactionNum>12121212,abcabc</transactionNum>
-		<command>12121212,abcabc</command>
-		<username>12121212,abcabc</username>
-		<funds>12121212,abcabc</funds>
+		<timestamp>1579085016616</timestamp>
+		<server>CLT1</server>
+		<transactionNum>1</transactionNum>
+		<command>ADD</command>
+		<username>jiosesdo</username>
+		<funds>100.00</funds>
 	</userCommand>
-	<accountTransaction>
-		<timestamp>12121212,abcabc</timestamp>
-		<server>12121212,abcabc</server>
-		<transactionNum>12121212,abcabc</transactionNum>
-		<action>12121212,abcabc</action>
-		<username>12121212,abcabc</username>
-		<funds>12121212,abcabc</funds>
-	</accountTransaction>
-	<systemEvent>
-		<timestamp>12121212,abcabc</timestamp>
-		<server>12121212,abcabc</server>
-		<transactionNum>12121212,abcabc</transactionNum>
-		<command>12121212,abcabc</command>
-		<username>12121212,abcabc</username>
-		<stockSymbol>12121212,abcabc</stockSymbol>
-		<funds>12121212,abcabc</funds>
-	</systemEvent>
+	<userCommand>
+		<timestamp>1579085016620</timestamp>
+		<server>CLT1</server>
+		<transactionNum>2</transactionNum>
+		<command>BUY</command>
+		<username>jiosesdo</username>
+		<funds>ABC</funds>
+	</userCommand>
 	<qouteServer>
-		<timestamp>12121212,abcabc</timestamp>
-		<server>12121212,abcabc</server>
-		<transactionNum>12121212,abcabc</transactionNum>
-		<qouteServerTime>12121212,abcabc</qouteServerTime>
-		<username>12121212,abcabc</username>
-		<stockSymbol>12121212,abcabc</stockSymbol>
-		<price>12121212,abcabc</price>
-		<cryptokey>12121212,abcabc</cryptokey>
+		<timestamp>1579085016621</timestamp>
+		<server>QSRV1</server>
+		<transactionNum>2</transactionNum>
+		<qouteServerTime>1579910658244</qouteServerTime>
+		<username>jiosesdo</username>
+		<stockSymbol>ABC</stockSymbol>
+		<price>1.44</price>
+		<cryptokey>DDc8b5JZeRQQyuIYvSeSK9lMjoruF8QcUnO70CA5EZs=
+</cryptokey>
 	</qouteServer>
-	<errorEvent>
-		<timestamp>12121212,abcabc</timestamp>
-		<server>12121212,abcabc</server>
-		<transactionNum>12121212,abcabc</transactionNum>
-		<command>12121212,abcabc</command>
-		<username>12121212,abcabc</username>
-		<stockSymbol>12121212,abcabc</stockSymbol>
-		<funds>12121212,abcabc</funds>
-		<errorMessage>12121212,abcabc</errorMessage>
-	</errorEvent>
+	<userCommand>
+		<timestamp>1579085016622</timestamp>
+		<server>CLT1</server>
+		<transactionNum>3</transactionNum>
+		<command>BUY</command>
+		<username>skelsioe</username>
+		<funds>DEF</funds>
+	</userCommand>
+	<qouteServer>
+		<timestamp>1579085016625</timestamp>
+		<server>QSRV1</server>
+		<transactionNum>3</transactionNum>
+		<qouteServerTime>1579910658247</qouteServerTime>
+		<username>skelsioe</username>
+		<stockSymbol>DEF</stockSymbol>
+		<price>1.00</price>
+		<cryptokey>zgOgxy1xUcdBi0diZTehEUHJcC9p+BiZFcBWqrYd66M=
+</cryptokey>
+	</qouteServer>
+	<userCommand>
+		<timestamp>1579085016626</timestamp>
+		<server>CLT1</server>
+		<transactionNum>4</transactionNum>
+		<command>SELL</command>
+		<username>bob</username>
+		<funds>GHI</funds>
+	</userCommand>
+	<qouteServer>
+		<timestamp>1579085016628</timestamp>
+		<server>QSRV1</server>
+		<transactionNum>4</transactionNum>
+		<qouteServerTime>1579910658251</qouteServerTime>
+		<username>bob</username>
+		<stockSymbol>GHI</stockSymbol>
+		<price>4113.15</price>
+		<cryptokey>dsQhUy+STbwOb4Sjj3i5gurPJDflaMXPM15fDSeSZAk=
+</cryptokey>
+	</qouteServer>
 </log>
