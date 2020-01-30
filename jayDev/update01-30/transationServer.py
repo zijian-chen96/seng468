@@ -179,6 +179,31 @@ def dbLogs(logInfo):
     mydb.commit()
 
 
+def dbBuySellLogs(logInfo):
+    logFormula = "INSERT INTO bslogs (username, transnumber, command, stockname, stockprice, amount, times) VALUES (%s,%s,%s,%s,%s,%s,%s)"
+    mycursor.execute(logFormula, logInfo)
+    mydb.commit()
+
+
+def deleteBuySellLogs(username):
+    checkBSLogs = "SELECT * FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
+    mycursor.execute(checkBSLogs, (username,))
+    result = mycursor.fetchall()[0]
+
+    #calculate the currFunds
+    accountFunds = checkAcountFunds(username)
+    currFunds = accountFunds - result[5]
+
+    #add to dbLogs
+    dbLogs((result[0], result[1], result[2], result[3], result[4], result[5], currFunds, result[6]))
+
+    #remove from bslogs
+    deleteFormula = "DELETE FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
+    mycursor.execute(deleteFormula, username)
+    mydb.commit()
+
+
+
 def commandControl(data):
     dataList = data.split(',')
 
@@ -206,7 +231,7 @@ def commandControl(data):
             newdata = dataList[3] + ',' + dataList[2] + '\r'
             dataFromQuote = sendToQuote(newdata).split(',')
 
-            dbLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], dataList[4], currFunds, getCurrTimestamp()))
+            dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], dataList[4], getCurrTimestamp()))
 
             #trans,command,stockname,amount,stockprice,qouteTimestamp,cryptokey,types
             logQueue.append(data+','+dataFromQuote[0]+','+dataFromQuote[3]+','+dataFromQuote[4]+',4')
@@ -227,6 +252,7 @@ def commandControl(data):
                 userFundsLeft = currFunds - snspba[1]
                 updateFunds(dataList[2], userFundsLeft)
                 addToStocksDB((dataList[2],snspba[0],snspba[1],snspba[2]))
+                deleteBuySellLogs(dataList[2])
 
                 #username,stockname,stockprice,amount,funds
                 result = dataList[2]+','+snspba[0]+','+str(snspba[1])+','+str(snspba[2])+','+str(userFundsLeft)
