@@ -39,8 +39,8 @@ def sendToQuote(data):
     fromUser = data
     quoteServerSocket = socket(AF_INET,SOCK_STREAM)
 
-    #quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
-    quoteServerSocket.connect(('192.168.0.10',44432))
+    quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
+    #quoteServerSocket.connect(('192.168.0.10',44432))
 
     quoteServerSocket.send(fromUser)
 
@@ -54,7 +54,7 @@ def sendToQuote(data):
 def recvFromHttp():
     serverSocket = socket(AF_INET, SOCK_STREAM)
     host = ''
-    port = 44437
+    port = 50010
 
     serverSocket.bind((host,port))
 
@@ -120,7 +120,7 @@ def checkLogTimestamp(username):
 
 
 def checkBuyAmount(username):
-    check = "SELECT stockname,stockprice,amount FROM logs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
+    check = "SELECT stockname,stockprice,amount FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
     mycursor.execute(check,(username,))
     result = mycursor.fetchall()[0]
     return result
@@ -189,18 +189,23 @@ def deleteBuySellLogs(username):
     checkBSLogs = "SELECT * FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
     mycursor.execute(checkBSLogs, (username,))
     result = mycursor.fetchall()[0]
+    print(result)
 
     #calculate the currFunds
     accountFunds = checkAcountFunds(username)
     currFunds = accountFunds - result[5]
+    print(accountFunds)
+    print(result[5])
+    print(currFunds)
 
     #add to dbLogs
-    dbLogs((result[0], result[1], result[2], result[3], result[4], result[5], currFunds, result[6]))
+    dbLogs((result[0], result[1], result[2], result[3], result[4], result[5], currFunds, getCurrTimestamp()))
 
     #remove from bslogs
     deleteFormula = "DELETE FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
-    mycursor.execute(deleteFormula, username)
+    mycursor.execute(deleteFormula, (username,))
     mydb.commit()
+    print('i am here')
 
 
 
@@ -248,11 +253,12 @@ def commandControl(data):
         if in60s(logTimestamp, commitTimestamp) == 1:
             currFunds =  Decimal(checkAcountFunds(dataList[2]))
             snspba = checkBuyAmount(dataList[2])
-            if currFunds >= snspba[1]:
-                userFundsLeft = currFunds - snspba[1]
-                updateFunds(dataList[2], userFundsLeft)
+            if currFunds >= snspba[2]:
+                userFundsLeft = currFunds - snspba[2]
                 addToStocksDB((dataList[2],snspba[0],snspba[1],snspba[2]))
                 deleteBuySellLogs(dataList[2])
+                updateFunds(dataList[2], userFundsLeft)
+                print('here')
 
                 #username,stockname,stockprice,amount,funds
                 result = dataList[2]+','+snspba[0]+','+str(snspba[1])+','+str(snspba[2])+','+str(userFundsLeft)
