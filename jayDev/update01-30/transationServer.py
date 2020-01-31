@@ -54,7 +54,7 @@ def sendToQuote(data):
 def recvFromHttp():
     serverSocket = socket(AF_INET, SOCK_STREAM)
     host = ''
-    port = 50001
+    port = 50004
 
     serverSocket.bind((host,port))
 
@@ -132,6 +132,16 @@ def checkLogTimestamp(username, command, stockname):
     return result
 
 
+def checkbsLogTimestamp(username, command):
+    print('i am hehe')
+    check = "SELECT times FROM bslogs WHERE username = %s AND command = %s ORDER BY transnumber DESC LIMIT 1"
+    mycursor.execute(check,(username, command,))
+    result = mycursor.fetchall()[0][0]
+    print(result)
+    return result
+
+
+
 def checkBuyAmount(username):
     check = "SELECT stockname,stockprice,amount FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
     mycursor.execute(check,(username,))
@@ -171,6 +181,18 @@ def addToDB(user): # # add the user into DB if is not in the DB else update the 
 def addToStocksDB(user):
     addFormula = "INSERT INTO stocks (username, stockname, stockprice, amount) VALUES (%s,%s,%s,%s)"
     mycursor.execute(addFormula, user)
+    mydb.commit()
+
+
+def addToTriggerDB(user):
+    addFormula = "INSERT INTO triggers (username, stockname, command, stockprice, times) VALUES (%s,%s,%s,%s,%s)"
+    mycursor.execute(addFormula, user)
+    mydb.commit()
+
+
+def deleteTriggerFromDB(username, stockname, command):
+    deleteFormula = "DELETE FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
+    mycursor.execute(deleteFormula, (username,stockname,command,))
     mydb.commit()
 
 
@@ -215,7 +237,7 @@ def deleteBuySellLogs(username):
     currFunds = accountFunds - result[5]
 
     #add to dbLogs
-    dbLogs((result[0], result[1], result[2], result[3], result[4], result[5], currFunds, getCurrTimestamp()))
+    dbLogs((result[0], result[1], result[2], result[3], result[4], result[5], currFunds, getCurrTimestamp(), result[7]))
 
     #remove from bslogs
     deleteFormula = "DELETE FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
@@ -283,14 +305,16 @@ def commandControl(data):
 
     elif dataList[1] == "COMMIT_BUY":
         commitTimestamp = getCurrTimestamp()
-        logTimestamp = checkLogTimestamp(dataList[2],'BUY', dataList[3])
+        logTimestamp = checkbsLogTimestamp(dataList[2],'BUY')
 
         if in60s(logTimestamp, commitTimestamp) == 1:
             currFunds =  Decimal(checkAcountFunds(dataList[2]))
             snspba = checkBuyAmount(dataList[2])
             if currFunds >= snspba[2]:
+
                 userFundsLeft = currFunds % snspba[1]
                 stockAmount = int(currFunds / snspba[1])
+
 
                 addToStocksDB((dataList[2],snspba[0],snspba[1],stockAmount))
                 deleteBuySellLogs(dataList[2])
@@ -329,19 +353,23 @@ def commandControl(data):
         pass
 
     elif dataList[1] == "CANCEL_SET_BUY":
-        pass
+        deleteTriggerFromDB(dataList[2], dataList[3], 'SET_BUY_TRIGGER')
+        return "CANCEL SET BUY!"
 
     elif dataList[1] == "SET_BUY_TRIGGER":
-        pass
+        addToTriggerDB((dataList[2], dataList[3], dataList[1], dataList[4], getCurrTimestamp()))
+        return "SET BUY TRIGGER!"
 
     elif dataList[1] == "SET_SELL_AMOUNT":
         pass
 
     elif dataList[1] == "SET_SELL_TRIGGER":
-        pass
+        addToTriggerDB((dataList[2], dataList[3], dataList[1], dataList[4], getCurrTimestamp()))
+        return "SET SELL TRIGGER!"
 
     elif dataList[1] == "CANCEL_SET_SELL":
-        pass
+        deleteTriggerFromDB(dataList[2], dataList[3], 'SET_SELL_TRIGGER')
+        return "CANCEL SET SELL!"
 
     elif dataList[1] == "DUMPLOG":
         pass
