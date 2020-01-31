@@ -54,7 +54,7 @@ def sendToQuote(data):
 def recvFromHttp():
     serverSocket = socket(AF_INET, SOCK_STREAM)
     host = ''
-    port = 50010
+    port = 50001
 
     serverSocket.bind((host,port))
 
@@ -112,9 +112,22 @@ def checkAcountUser(username): # check is the user already in DB or not
         return 0
 
 
-def checkLogTimestamp(username):
-    check = "SELECT times FROM logs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
-    mycursor.execute(check,(username,))
+def checkStockUser(username, stockname): # check is the user owned the stock
+    check = "SELECT count(stockname) FROM logs WHERE username = %s AND stockname = %s AND command = 'QUOTE'"
+    mycursor.execute(check, (username, stockname,))
+    result = mycursor.fetchall()[0][0]
+    if result > 0:
+        check2 = "SELECT stockprice FROM logs WHERE username = %s AND stockname = %s AND command = 'QUOTE' ORDER BY transnumber LIMIT 1"
+        mycursor.execute(check2, (username, stockname,))
+        result2 = mycursor.fetchall()[0][0]
+        return result2
+    else:
+        return 0
+
+
+def checkLogTimestamp(username, command):
+    check = "SELECT times FROM logs WHERE username = %s AND command = %s ORDER BY transnumber DESC LIMIT 1"
+    mycursor.execute(check,(username, command,))
     result = mycursor.fetchall()[0][0]
     return result
 
@@ -123,6 +136,13 @@ def checkBuyAmount(username):
     check = "SELECT stockname,stockprice,amount FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
     mycursor.execute(check,(username,))
     result = mycursor.fetchall()[0]
+    return result
+
+
+def checkCrypto(username, command):
+    check = "SELECT cryptokey FROM logs WHERE username = %s AND command = %s ORDER BY transnumber DESC LIMIT 1"
+    mycursor.execute(check, (username, command,))
+    result = mycursor.fetchall()[0][0]
     return result
 
 
@@ -174,13 +194,13 @@ def sellStock(username, stockname, amount): # sell the user stock amount if is e
 
 def dbLogs(logInfo):
     #print('here')
-    logFormula = "INSERT INTO logs (username, transnumber, command, stockname, stockprice, amount, funds, times) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)"
+    logFormula = "INSERT INTO logs (username, transnumber, command, stockname, stockprice, amount, funds, times, cryptokey) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)"
     mycursor.execute(logFormula, logInfo)
     mydb.commit()
 
 
 def dbBuySellLogs(logInfo):
-    logFormula = "INSERT INTO bslogs (username, transnumber, command, stockname, stockprice, amount, times) VALUES (%s,%s,%s,%s,%s,%s,%s)"
+    logFormula = "INSERT INTO bslogs (username, transnumber, command, stockname, stockprice, amount, times, cryptokey) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)"
     mycursor.execute(logFormula, logInfo)
     mydb.commit()
 
@@ -189,14 +209,10 @@ def deleteBuySellLogs(username):
     checkBSLogs = "SELECT * FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
     mycursor.execute(checkBSLogs, (username,))
     result = mycursor.fetchall()[0]
-    print(result)
 
     #calculate the currFunds
     accountFunds = checkAcountFunds(username)
     currFunds = accountFunds - result[5]
-    print(accountFunds)
-    print(result[5])
-    print(currFunds)
 
     #add to dbLogs
     dbLogs((result[0], result[1], result[2], result[3], result[4], result[5], currFunds, getCurrTimestamp()))
@@ -205,7 +221,6 @@ def deleteBuySellLogs(username):
     deleteFormula = "DELETE FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
     mycursor.execute(deleteFormula, (username,))
     mydb.commit()
-    print('i am here')
 
 
 
@@ -215,7 +230,7 @@ def commandControl(data):
     if dataList[1] == "ADD":
         print("Data should be send direct to Aduit Server: " + data)
         addToDB((dataList[2], dataList[3]))
-        dbLogs((dataList[2], dataList[0], dataList[1], None, None, None, dataList[3], getCurrTimestamp()))
+        dbLogs((dataList[2], dataList[0], dataList[1], None, None, None, dataList[3], getCurrTimestamp(), None))
 
         #trans,userid,funds,types
         logQueue.append(data + ',1')
@@ -223,10 +238,11 @@ def commandControl(data):
 
     elif dataList[1] == "QUOTE":
         newdata = dataList[3] + ',' + dataList[2] + '\r'
-        dataFromQuote = sendToQuote(newdata).split(',')
-        dbLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], None, None, getCurrTimestamp()))
+        dataFromQuote = sendToQuote(newdata).rstrip().split(',')
+        dbLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], None, None, getCurrTimestamp(), dataFromQuote[4]))
         # userid,stockname,stockprice,timestamp,cryptokey
-        result = str(dataList[3]+','+dataList[2]+','+dataFromQuote[0]+','+dataFromQuote[3],+','+dataFromQuote[4])
+
+        result = str(dataList[2])+','+str(dataList[3])+','+dataFromQuote[0]+','+dataFromQuote[3]
         return result
 
     elif dataList[1] == 'BUY':
@@ -234,31 +250,51 @@ def commandControl(data):
         if currFunds >= Decimal(dataList[4]):
             logQueue.append(data + ',1')
             newdata = dataList[3] + ',' + dataList[2] + '\r'
-            dataFromQuote = sendToQuote(newdata).split(',')
+            stockprice = checkStockUser(dataList[2], dataList[3])
 
-            dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], dataList[4], getCurrTimestamp()))
+            commandTimestamp = getCurrTimestamp()
+            logTimestamp = checkLogTimestamp(dataList[2],'QUOTE')
+            crypto = checkCrypto(dataList[2], 'QUOTE')
 
-            #trans,command,stockname,amount,stockprice,qouteTimestamp,cryptokey,types
-            logQueue.append(data+','+dataFromQuote[0]+','+dataFromQuote[3]+','+dataFromQuote[4]+',4')
+            if stockprice > 0 and (in60s(logTimestamp, commandTimestamp) == 1):
 
-            #userid,stockname,amount,stockprice,qouteTimestamp,cryptokey
-            result = str(dataList[1]+','+dataList[2]+','+dataList[4]+','+dataFromQuote[0]+','+dataFromQuote[3]+','+dataFromQuote[4])
-            return result
+                dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], stockprice, dataList[4], getCurrTimestamp(), crypto))
+
+                #trans,command,stockname,amount,stockprice,qouteTimestamp,cryptokey,types
+                logQueue.append(data+','+str(stockprice)+','+str(logTimestamp)+','+crypto+',4')
+
+                #userid,stockname,amount,stockprice,qouteTimestamp,cryptokey
+                result = str(dataList[1])+','+str(dataList[2])+','+str(dataList[4])+','+str(stockprice)+','+str(logTimestamp)+','+crypto
+                return result
+
+            else:
+                dataFromQuote = sendToQuote(newdata).split(',')
+
+                dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], dataList[4], getCurrTimestamp(), dataFromQuote[4]))
+
+                #trans,command,stockname,amount,stockprice,qouteTimestamp,cryptokey,types
+                logQueue.append(data+','+dataFromQuote[0]+','+dataFromQuote[3]+','+dataFromQuote[4]+',4')
+
+                #userid,stockname,amount,stockprice,qouteTimestamp,cryptokey
+                result = str(dataList[1]+','+dataList[2]+','+dataList[4]+','+dataFromQuote[0]+','+dataFromQuote[3]+','+dataFromQuote[4])
+                return result
         else:
             return "User Funds Not Enough!"
 
     elif dataList[1] == "COMMIT_BUY":
         commitTimestamp = getCurrTimestamp()
-        logTimestamp = checkLogTimestamp(dataList[2])
+        logTimestamp = checkLogTimestamp(dataList[2],'BUY')
+
         if in60s(logTimestamp, commitTimestamp) == 1:
             currFunds =  Decimal(checkAcountFunds(dataList[2]))
             snspba = checkBuyAmount(dataList[2])
             if currFunds >= snspba[2]:
-                userFundsLeft = currFunds - snspba[2]
-                addToStocksDB((dataList[2],snspba[0],snspba[1],snspba[2]))
+                userFundsLeft = currFunds % snspba[1]
+                stockAmount = int(currFunds / snspba[1])
+
+                addToStocksDB((dataList[2],snspba[0],snspba[1],stockAmount))
                 deleteBuySellLogs(dataList[2])
                 updateFunds(dataList[2], userFundsLeft)
-                print('here')
 
                 #username,stockname,stockprice,amount,funds
                 result = dataList[2]+','+snspba[0]+','+str(snspba[1])+','+str(snspba[2])+','+str(userFundsLeft)
@@ -270,9 +306,9 @@ def commandControl(data):
         else:
             return "User over the commit time CANCEL_BUY!"
 
-
     elif dataList[1] == "CANCEL_BUY":
-        pass
+        deleteBuySellLogs(dataList[2])
+        return "BUY Command has been caneled!"
 
     elif dataList[1] == "SELL":
         logQueue.append(data + ',1')
@@ -286,7 +322,8 @@ def commandControl(data):
         pass
 
     elif dataList[1] == "CANCEL_SELL":
-        pass
+        deleteBuySellLogs(dataList[2])
+        return " SELL Command has been caneled"
 
     elif dataList[1] == "SET_BUY_AMOUNT":
         pass
