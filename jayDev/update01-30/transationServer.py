@@ -125,9 +125,9 @@ def checkStockUser(username, stockname): # check is the user owned the stock
         return 0
 
 
-def checkLogTimestamp(username, command):
-    check = "SELECT times FROM logs WHERE username = %s AND command = %s ORDER BY transnumber DESC LIMIT 1"
-    mycursor.execute(check,(username, command,))
+def checkLogTimestamp(username, command, stockname):
+    check = "SELECT times FROM logs WHERE username = %s AND command = %s AND stockname = %s ORDER BY transnumber DESC LIMIT 1"
+    mycursor.execute(check,(username, command, stockname))
     result = mycursor.fetchall()[0][0]
     return result
 
@@ -253,7 +253,7 @@ def commandControl(data):
             stockprice = checkStockUser(dataList[2], dataList[3])
 
             commandTimestamp = getCurrTimestamp()
-            logTimestamp = checkLogTimestamp(dataList[2],'QUOTE')
+            logTimestamp = checkLogTimestamp(dataList[2],'QUOTE',dataList[3])
             crypto = checkCrypto(dataList[2], 'QUOTE')
 
             if stockprice > 0 and (in60s(logTimestamp, commandTimestamp) == 1):
@@ -283,7 +283,7 @@ def commandControl(data):
 
     elif dataList[1] == "COMMIT_BUY":
         commitTimestamp = getCurrTimestamp()
-        logTimestamp = checkLogTimestamp(dataList[2],'BUY')
+        logTimestamp = checkLogTimestamp(dataList[2],'BUY', dataList[3])
 
         if in60s(logTimestamp, commitTimestamp) == 1:
             currFunds =  Decimal(checkAcountFunds(dataList[2]))
