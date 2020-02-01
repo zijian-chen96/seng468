@@ -20,6 +20,22 @@ class AuditServer(threading.Thread):
                 auditSocket.send(data)
 
 
+class TriggerServer(threading.Thread):
+    def __init__(self, mydb, dataList):
+        threading.Thread.__init__(self)
+        self.logQueue = logQueue
+        self.mydb = mydb
+        self.dataList = dataList
+
+    def run(self):
+        mycursor = mydb.cursor()
+        print('I am in the triggers function')
+        #while True:
+        if checkIsTrigger(dataList[2], dataList[3], dataList[1]) == 1:
+            print('triggers server is working...')
+
+
+
 def getCurrTimestamp():
     dateTimeObj = datetime.now()
     #print(dateTimeObj)
@@ -200,6 +216,22 @@ def checkCrypto(username, command):
     return result
 
 
+def checkIsTrigger(username, stockname, command):
+    check = "SELECT count(command) FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
+    mycursor.execute(check, (username, stockname, command,))
+    result = mycursor.fetchall()[0][0]
+    if result > 0:
+        return 1
+    else:
+        return 0
+
+
+def getTriggerStockPrice(username, stockname, command):
+    check = "SELECT stockprice FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
+    mycursor.execute(check, (username, stockname, command,))
+    return mycursor.fetchall()[0][0]
+
+
 def updateFunds(username, funds): # update the user acount funds
     updateFormula = "UPDATE acounts SET funds = %s WHERE username = %s"
     mycursor.execute(updateFormula, (funds, username,))
@@ -247,15 +279,6 @@ def removeFromDB(user): # remove the user funds from DB
         updateFunds(user[0], newFunds)
     else:
         print("Acount funds is not enough!")
-
-
-def sellStock(username, stockname, amount): # sell the user stock amount if is enough
-    currAmount = checkStockAmount(username, stockname)[1]
-    if currAmount >= amount:
-        newAmount = currAmount - amount
-        updateStockAmount(username, stockname, newAmount)
-    else:
-        print("Stock Amount is not enough!")
 
 
 def dbLogs(logInfo):
@@ -417,37 +440,29 @@ def commandControl(data):
             print "User dose not own the stocks!"
 
     elif dataList[1] == "COMMIT_SELL":
-        print('2222')
         #check to see if user has asked for quote within last 60 seconds
 
         stockname = getBuySellData(dataList[2], 'SELL')[0]
-        print(stockname)
         amount = checkStockAmount(dataList[2], stockname)
-        print(amount)
 
         if checkCommandInbsLog(dataList[2], 'SELL') == 1 and amount[1] > 0:
-            print('11111')
+
             commitTime = getCurrTimestamp()
             logTimestamp = checkbsLogTimestamp(dataList[2],'SELL')
 
             if checkIsQuoteStock(dataList[2], stockname) == 1 and in60s(logTimestamp, commitTime) == 1:
-                print('2222222')
-                currFunds =  Decimal(checkAcountFunds(dataList[2]))
-                print(currFunds)
 
+                currFunds =  Decimal(checkAcountFunds(dataList[2]))
                 snspfd = getBuySellData(dataList[2], 'SELL')
-                print(snspfd)
+
 
                 total = amount[1] * snspfd[1]
                 if total >= snspfd[2]:
-                    amountCanSell = int(snspfd[2]/snspfd[1])
-                    print(amountCanSell)
 
+                    amountCanSell = int(snspfd[2]/snspfd[1])
                     moneyCanGet = amountCanSell * snspfd[1]
-                    print(moneyCanGet)
                     newFunds = currFunds + moneyCanGet
                     shareLeft = amount[1] - amountCanSell
-
 
                     updateStockAmount(dataList[2], snspfd[0], snspfd[1], shareLeft)
                     deleteBuySellLogs(dataList[2])
@@ -456,10 +471,8 @@ def commandControl(data):
                     result = dataList[2]+','+snspfd[0]+','+str(snspfd[1])+','+str(snspfd[2])+','+str(newFunds)
                     return result
 
-
                 else:
                     return "ERROR USER OWN AMOUNT NOT ENOUGH!"
-
 
             else:
 
@@ -476,7 +489,9 @@ def commandControl(data):
         return " SELL Command has been caneled"
 
     elif dataList[1] == "SET_BUY_AMOUNT":
-        pass
+        TriggerServer = TriggerServer(mydb, dataList)
+        TriggerServer.start()
+        return "Trigger is hit running..."
 
     elif dataList[1] == "CANCEL_SET_BUY":
         deleteTriggerFromDB(dataList[2], dataList[3], 'SET_BUY_TRIGGER')
