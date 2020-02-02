@@ -1,16 +1,16 @@
-**<center><h1> seng468 </h1></center>**
+**<centre><h1> seng468 </h1></centre>**
 <h2>Scalable Day Trading System</h2>
 <h3>Initial Requirements</h3>
 
 The system must contains the following functions:
 
-• View their account.<br>
+• User can view their account.<br>
 • Add money to their account.<br>
-• Get a stock Quote.<br>
-• Buy a number of shares in a stock.<br>
-• Sell a number of shares in a stock they own.<br>
-• Set an automated sell point for a stock.<br>
-• Set a automated but point for a stock.<br>
+• Get quote of a stock.<br>
+• Buy a number of shares of a stock.<br>
+• Sell a number of shares of the stocks they own.<br>
+• Set an automated sell price for a stock.<br>
+• Set an automated buy price for a stock.<br>
 • Review their complete list of transactions.<br>
-• Cancel a specified transaction prior to its being committed.<br>
+• Cancel a specified transaction prior to it being committed.<br>
 • Commit a transaction.<br>
