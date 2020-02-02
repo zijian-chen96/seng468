@@ -4,6 +4,7 @@ import mysql.connector
 import sys
 from datetime import datetime
 from decimal import Decimal
+import time
 
 #sudo iptables -A INPUT -p tcp --dport 10000:50000 -j ACCEPT
 
@@ -24,7 +25,7 @@ class AuditServer(threading.Thread):
 
 
 class TriggerServer(threading.Thread):
-    def __init__(self, mydb, dataList):
+    def __init__(self, mydb, dataList, time):
         threading.Thread.__init__(self)
         self.mydb = mydb
         self.dataList = dataList
@@ -36,12 +37,97 @@ class TriggerServer(threading.Thread):
         else:
             command = 'SET_SELL_TRIGGER'
 
-
-        while True:
+        while command == 'SET_SELL_TRIGGER':
+            #if there exists such trigger 2 = username 3 = stockname
             if checkIsTrigger(dataList[2], dataList[3], command) == 1:
-                pass
+                #check tigger price and quote price ####getTriggerStockPrice(username, stockname, command)
+                trigPrice = getTriggerStockPrice(dataList[2],dataList[3],command)
+                print("trigger price: " + str(trigPrice))
+                #check if the set amount is valid
+                if trigPrice <= dataList[4]:
+                    commandInfo = dataList[3] + ',' + dataList[2] + '\r'
+                    dataFromQuote = sendToQuote(commandInfo).rstrip().split(',')
+                    #loop until trigger price < current stock price
+                    print("current stock price: " + dataFromQuote[0])
+                    while trigPrice > Decimal(dataFromQuote[0]):
+                        time.sleep(5)
+                        dataFromQuote = sendToQuote(commandInfo).rstrip().split(',')
+                        print("current stock price: " + dataFromQuote[0])
+
+                    #check if user has enough stocks
+                    numStocks = checkStockAmount(dataList[2], dataList[3])
+                    print(numStocks)
+                    #userHoldPrice = numStocks * Decimal(dataFromQuote[0])
+                    numStocksToSell = int(Decimal(dataList[4]) / Decimal(dataFromQuote[0]))
+                    print(numStocksToSell)
+
+                    if numStocks >= numStocksToSell:
+
+                        currFunds = Decimal(checkAcountFunds(dataList[2]))
+
+                        moneyCanGet = numStocksToSell * Decimal(dataFromQuote[0])
+                        newFunds = currFunds + moneyCanGet
+
+                        updateStockAmount(dataList[2], dataList[3], (numStocks-numStocksToSell))
+                        dbLogs((dataList[2], dataList[0], 'SELL', dataList[3], dataFromQuote[0], dataList[4], currFunds, getCurrTimestamp(), dataFromQuote[4]))
+                        updateFunds(dataList[2], newFunds)
+
+                    else:
+                        return "user does not have enough stocks to sell"
+
+                else:
+                    return "SET amount has to be bigger than Trigger!"
+                print('exit out of thread')
+                break
+
+            else:
+                return "No such trigger!"
 
 
+        while command == 'SET_BUY_TRIGGER':
+            if checkIsTrigger(dataList[2], dataList[3], command) == 1:
+                buyStockPrice = getTriggerStockPrice(dataList[2], dataList[3], command)
+                print(dataList)
+
+                if holdMoneyFromAcount(dataList[2], dataList[4]) == 1:
+                    print(dataList[4])
+                    holdMoney = Decimal(dataList[4])
+
+                    while True:
+                        dataFromQuote = sendToQuote(dataList[3] + ',' + dataList[2] + '\r').split(',')
+
+
+                        if Decimal(dataFromQuote[0]) <= buyStockPrice and Decimal(dataFromQuote[0]) <= holdMoney:
+                            print('i am here')
+                            currFunds =  Decimal(checkAcountFunds(dataList[2]))
+
+                            userFundsLeft = (holdMoney % Decimal(dataFromQuote[0])) + currFunds
+                            stockAmount = int(holdMoney / Decimal(dataFromQuote[0]))
+                            print(holdMoney)
+                            print(currFunds)
+                            print(userFundsLeft)
+                            print(stockAmount)
+
+                            addToStocksDB((dataList[2],dataList[3],stockAmount))
+                            # username, transnumber, command, stockname, stockprice, amount, funds, times, cryptokey
+                            dbLogs((dataList[2], dataList[0], 'BUY', dataList[3], dataFromQuote[0], dataList[4], currFunds, getCurrTimestamp(), dataFromQuote[4]))
+                            updateFunds(dataList[2],userFundsLeft)
+                            print('Good!')
+                            break
+
+                        else:
+                            print('sleep time')
+                            time.sleep(5)
+                    print('finish exit out of thread!')
+
+                    break
+
+                else:
+                    return "User funds is not enough!"
+
+
+            else:
+                return 'TRIGGER NOT FOUND!'
 
 
 
@@ -79,7 +165,7 @@ def sendToQuote(data):
 def recvFromHttp():
     serverSocket = socket(AF_INET, SOCK_STREAM)
     host = ''
-    port = 50000
+    port = 50001
 
     serverSocket.bind((host,port))
 
@@ -229,7 +315,6 @@ def checkIsTrigger(username, stockname, command):
     check = "SELECT count(command) FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
     mycursor.execute(check, (username, stockname, command,))
     result = mycursor.fetchall()[0][0]
-    print(result)
     if result > 0:
         return 1
     else:
@@ -240,6 +325,24 @@ def getTriggerStockPrice(username, stockname, command):
     check = "SELECT stockprice FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
     mycursor.execute(check, (username, stockname, command,))
     return mycursor.fetchall()[0][0]
+
+
+def holdMoneyFromAcount(username, amount):
+    getFunds =  checkAcountFunds(username)
+    newFunds = getFunds - Decimal(amount)
+    print(getFunds)
+    print(newFunds)
+    if getFunds >= Decimal(amount):
+        print('yes man')
+        holdMoneyFormula = "UPDATE acounts SET funds = %s WHERE username = %s"
+        mycursor.execute(holdMoneyFormula, (newFunds,username))
+        mydb.commit()
+        print('now is here')
+        return 1
+    else:
+        return 0
+
+
 
 
 def updateFunds(username, funds): # update the user acount funds
@@ -538,7 +641,7 @@ def commandControl(data):
         return " SELL Command has been caneled"
 
     elif dataList[1] == "SET_BUY_AMOUNT":
-        ts = TriggerServer(mydb, dataList)
+        ts = TriggerServer(mydb, dataList, time)
         ts.start()
         return "Trigger is hit running..."
 
@@ -551,7 +654,9 @@ def commandControl(data):
         return "SET BUY TRIGGER!"
 
     elif dataList[1] == "SET_SELL_AMOUNT":
-        pass
+        ts = TriggerServer(mydb, dataList, time)
+        ts.start()
+        return "Trigger is hit running..."
 
     elif dataList[1] == "SET_SELL_TRIGGER":
         addToTriggerDB((dataList[2], dataList[3], dataList[1], dataList[4], getCurrTimestamp()))
