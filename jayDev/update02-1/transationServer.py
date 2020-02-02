@@ -39,6 +39,7 @@ class TriggerServer(threading.Thread):
 
         while True:
             if checkIsTrigger(dataList[2], dataList[3], command) == 1:
+                pass
 
 
 
@@ -63,8 +64,8 @@ def sendToQuote(data):
     fromUser = data
     quoteServerSocket = socket(AF_INET,SOCK_STREAM)
 
-    #quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
-    quoteServerSocket.connect(('192.168.0.10',44432))
+    quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
+    #quoteServerSocket.connect(('192.168.0.10',44432))
 
     quoteServerSocket.send(fromUser)
 
@@ -78,7 +79,7 @@ def sendToQuote(data):
 def recvFromHttp():
     serverSocket = socket(AF_INET, SOCK_STREAM)
     host = ''
-    port = 40006
+    port = 50000
 
     serverSocket.bind((host,port))
 
@@ -121,9 +122,9 @@ def checkAcountFunds(username): # check the acount funds
 
 
 def checkStockAmount(username, stockname): # check the stock amount the user owned
-    check = "SELECT stockprice,amount FROM stocks WHERE username = %s and stockname = %s"
+    check = "SELECT amount FROM stocks WHERE username = %s and stockname = %s"
     mycursor.execute(check, (username, stockname,))
-    return mycursor.fetchall()[0]
+    return mycursor.fetchall()[0][0]
 
 
 def checkUserOwnStock(username, stockname):
@@ -247,7 +248,7 @@ def updateFunds(username, funds): # update the user acount funds
     mydb.commit()
 
 
-def updateStockAmount(username, stockname, stockprice, amount): # update the stock amount the user owned
+def updateStockAmount(username, stockname, amount): # update the stock amount the user owned
     updateFormula = "UPDATE stocks SET amount = %s WHERE username = %s AND stockname = %s"
     mycursor.execute(updateFormula, (amount, username, stockname,))
     mydb.commit()
@@ -265,9 +266,14 @@ def addToDB(user): # # add the user into DB if is not in the DB else update the 
 
 def addToStocksDB(user):
     if checkUserOwnStock(user[0],user[1]) == 0:
-        addFormula = "INSERT INTO stocks (username, stockname, stockprice, amount) VALUES (%s,%s,%s,%s)"
+        addFormula = "INSERT INTO stocks (username, stockname, amount) VALUES (%s,%s,%s)"
         mycursor.execute(addFormula, user)
         mydb.commit()
+    else:
+        oldShare = checkStockAmount(user[0], user[1])
+        newShare = user[2] + oldShare
+        updateStockAmount(user[0], user[1], newShare)
+
 
 
 def addToTriggerDB(user):
@@ -405,7 +411,7 @@ def commandControl(data):
                     stockAmount = int(snspba[2] / snspba[1])
 
 
-                    addToStocksDB((dataList[2],snspba[0],snspba[1],stockAmount))
+                    addToStocksDB((dataList[2],snspba[0],stockAmount))
                     deleteBuySellLogs(dataList[2])
                     updateFunds(dataList[2], userFundsLeft)
 
@@ -431,16 +437,21 @@ def commandControl(data):
             return "User does not own the stocks!"
 
         amount = checkStockAmount(dataList[2], dataList[3])
-        ownMoney = Decimal(amount[0]) * Decimal(amount[1])
 
-
-        if amount[1] > 0 and ownMoney >= Decimal(dataList[4]):
+        if amount > 0:
 
             commandTimestamp = getCurrTimestamp()
             logTimestamp = checkLogTimestamp(dataList[2],'QUOTE',dataList[3])
 
             if checkCommandInLog(dataList[2],"QUOTE") == 1 and in60s(logTimestamp, commandTimestamp) == 1:
+
                 stockprice = checkStockUser(dataList[2], dataList[3])
+
+                ownMoney = stockprice * Decimal(amount)
+
+                if ownMoney < Decimal(dataList[4]):
+                    return "User money is not enough!"
+
                 crypto = checkCrypto(dataList[2], 'QUOTE')
 
                 dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], stockprice, dataList[4], getCurrTimestamp(), crypto))
@@ -454,6 +465,11 @@ def commandControl(data):
 
             else:
                 dataFromQuote = sendToQuote(newdata).split(',')
+
+                ownMoney = Decimal(dataFromQuote[0]) * Decimal(amount)
+
+                if ownMoney < Decimal(dataList[4]):
+                    return "User money is not enough!"
 
                 dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], dataList[4], getCurrTimestamp(), dataFromQuote[4]))
 
@@ -479,7 +495,7 @@ def commandControl(data):
         amount = checkStockAmount(dataList[2], stockname)
 
 
-        if checkCommandInbsLog(dataList[2], 'SELL') == 1 and amount[1] > 0:
+        if checkCommandInbsLog(dataList[2], 'SELL') == 1 and amount > 0:
 
             commitTime = getCurrTimestamp()
             logTimestamp = checkbsLogTimestamp(dataList[2],'SELL')
@@ -489,16 +505,15 @@ def commandControl(data):
                 currFunds =  Decimal(checkAcountFunds(dataList[2]))
                 snspfd = getBuySellData(dataList[2], 'SELL')
 
-
-                total = amount[1] * snspfd[1]
+                total = amount * snspfd[1]
                 if total >= snspfd[2]:
 
                     amountCanSell = int(snspfd[2]/snspfd[1])
                     moneyCanGet = amountCanSell * snspfd[1]
                     newFunds = currFunds + moneyCanGet
-                    shareLeft = amount[1] - amountCanSell
+                    shareLeft = amount - amountCanSell
 
-                    updateStockAmount(dataList[2], snspfd[0], snspfd[1], shareLeft)
+                    updateStockAmount(dataList[2], snspfd[0], shareLeft)
                     deleteBuySellLogs(dataList[2])
                     updateFunds(dataList[2], newFunds)
 
@@ -524,9 +539,7 @@ def commandControl(data):
 
     elif dataList[1] == "SET_BUY_AMOUNT":
         ts = TriggerServer(mydb, dataList)
-        print('2222')
         ts.start()
-        print('3333')
         return "Trigger is hit running..."
 
     elif dataList[1] == "CANCEL_SET_BUY":
