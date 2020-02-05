@@ -54,9 +54,9 @@ class TriggerServer(threading.Thread):
                     #loop until trigger price < current stock price
                     #print("current stock price: " + dataFromQuote[0])
                     while trigPrice > Decimal(dataFromQuote[0]):
-                        time.sleep(5)
+                        time.sleep(1)
                         dataFromQuote = sendToQuote(commandInfo).rstrip().split(',')
-                        #print("current stock price: " + dataFromQuote[0])
+                        print("current stock price: " + dataFromQuote[0])
 
                     #check if user has enough stocks
                     #print(dataList2)
@@ -130,8 +130,8 @@ class TriggerServer(threading.Thread):
                             break
 
                         else:
-                            #print('sleep time')
-                            time.sleep(5)
+                            print('sleep time')
+                            time.sleep(1)
                     print('finish exit out of thread!')
 
                     break
@@ -164,8 +164,8 @@ def sendToQuote(data):
     fromUser = data
     quoteServerSocket = socket(AF_INET,SOCK_STREAM)
 
-    #quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
-    quoteServerSocket.connect(('192.168.0.10',44432))
+    quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
+    # quoteServerSocket.connect(('192.168.0.10',44432))
 
     quoteServerSocket.send(fromUser)
 
@@ -179,7 +179,7 @@ def sendToQuote(data):
 def recvFromHttp():
     serverSocket = socket(AF_INET, SOCK_STREAM)
     host = ''
-    port = 50002
+    port = 50003
 
     serverSocket.bind((host,port))
 
@@ -192,7 +192,7 @@ def recvFromHttp():
     try:
         while True:
             data = ''
-            data = connectSocket.recv(5000)
+            data = connectSocket.recv(10240)
 
             if data:
                 print("Data recv from HTTP Server: " + data)
@@ -534,7 +534,6 @@ def commandControl(data):
     elif dataList[1] == 'BUY':
         currFunds = checkAcountFunds(dataList[2])
         if currFunds >= Decimal(dataList[4]):
-            logQueue.append(data + ',1')
             newdata = dataList[3] + ',' + dataList[2] + '\r'
             stockprice = checkStockUser(dataList[2], dataList[3])
 
@@ -604,7 +603,8 @@ def commandControl(data):
                     #trans,command,username,server,types:userCommand-commitBuy(4)
                     logQueue.append(data+',CLT1'+',4')
                     #trans,command,username,funds,server,types:accountTransaction-remove(11)
-                    logQueue.append(dataList[0]+',remove,'+dataList[2]+','+str(snspba[2])+',CLT1'+',11')
+                    logQueue.append(dataList[0]+',remove,'+dataList[2]+','+str(snspba[2])+',CLT1'+',14')
+                    #print(dataList[0]+',remove,'+dataList[2]+','+str(snspba[2])+',CLT1'+',14')
 
                     #username,stockname,stockprice,amount,funds
                     result = dataList[2]+','+snspba[0]+','+str(snspba[1])+','+str(snspba[2])+','+str(userFundsLeft)
@@ -691,7 +691,6 @@ def commandControl(data):
         stockname = getBuySellData(dataList[2], 'SELL')[0]
         amount = checkStockAmount(dataList[2], stockname)
 
-
         if checkCommandInbsLog(dataList[2], 'SELL') == 1 and amount > 0:
 
             commitTime = getCurrTimestamp()
@@ -717,7 +716,7 @@ def commandControl(data):
                     #trans,command,username,server,types:userCommand-commitBuy(4)
                     logQueue.append(data+',CLT1'+',4')
                     #trans,command,username,funds,server,types:accountTransaction-add(11)
-                    logQueue.append(dataList[0]+',add,'+dataList[2]+','+str(snspba[2])+',CLT1'+',11')
+                    logQueue.append(dataList[0]+',add,'+dataList[2]+','+str(snspfd[2])+',CLT1'+',11')
 
                     result = dataList[2]+','+snspfd[0]+','+str(snspfd[1])+','+str(snspfd[2])+','+str(newFunds)
                     return result
@@ -784,7 +783,7 @@ def commandControl(data):
 
     elif dataList[1] == "SET_SELL_TRIGGER":
         #trans,command,username,stockname,stockprice,server,types:userCommand-setSellTrigger(6)
-        logQueue.append(data+',CLT1'+',6')
+        logQueue.append(data+',CLT1'+',3')
         #trans,command,username,stockname,stockprice,server,types:systemEvent-setSellTrigger(13)
         logQueue.append(data+',HSD1'+',13')
 
@@ -815,19 +814,21 @@ def commandControl(data):
 
     elif dataList[1] == "DISPLAY_SUMMARY":
         #trans,command,username,server,types:userCommand-dumplog1(5)
-        logQueue.append(data+',CLT1'+',5')
+        logQueue.append(data+',CLT1'+',4')
         return getSummary(dataList[2])
 
 if __name__ == '__main__':
     logQueue = []
-    # auditIP = "192.168.1.188"
-    # auditPort = 44432
-    #
-    # auditSocket = socket(AF_INET, SOCK_STREAM)
-    # auditSocket.connect((auditIP,auditPort))
-    #
-    # AuditServer = AuditServer(logQueue, auditSocket)
-    # AuditServer.start()
+    auditIP = '192.168.1.188'
+    auditIP2 = "10.0.2.15"
+    auditPort = 55558
+
+    auditSocket = socket(AF_INET, SOCK_STREAM)
+    auditSocket.connect((auditIP,auditPort))
+
+    AuditServer = AuditServer(logQueue, auditSocket)
+    AuditServer.start()
+
 
     mydb = mysql.connector.connect(
         host="localhost",
@@ -838,4 +839,5 @@ if __name__ == '__main__':
     mycursor = mydb.cursor()
 
     recvFromHttp()
-    #print(logQueue)
+    # print(logQueue)
+    AuditServer.join()
