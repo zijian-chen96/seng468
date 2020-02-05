@@ -2,20 +2,22 @@ from socket import *
 import sys
 from xml.dom import minidom
 from datetime import datetime
+#xmllint --schema logfile.xsd --noout yourlogfile.xml
 
 def main(root):
     sSocket = socket(AF_INET, SOCK_STREAM)
     print 'this is the audit server'
 
-    sSocket.bind(("", 44432))
+    sSocket.bind(("", 55558))
     sSocket.listen(5)
     print 'listening for connection'
 
 
     connection, addr = sSocket.accept()
+    print 'accepted'
     try:
         while True:
-            transactions = ""
+            # transactions = ""
             transactions = connection.recv(1024)
             transactionsList = transactions.split(',')
             print(transactionsList, "calling detTage")
@@ -78,11 +80,12 @@ def userCommandChildren_3(data):
     transactionNumChild(userCommandChild, data[0])
     commandChild(userCommandChild, data[1])
     usernameChild(userCommandChild, data[2])
-    stockSymbolChild(userCommandChild, data[4])
-    fundsChild(userCommandChild, data[3])
+    stockSymbolChild(userCommandChild, data[3])
+    fundsChild(userCommandChild, data[4])
 
 #trans,command,username,server,types:userCommand-commitBuy(4)
 def userCommandChildren_4(data):
+    print("---------"+str(data)+"-----------")
     userCommandChild = root.createElement('userCommand')
     xml.appendChild(userCommandChild)
 
@@ -143,17 +146,17 @@ def userCommandChildren_8(data):
 
 #trans,command,userid,stockname,stockprice,timestamp,cryptokey,server,types:quoteServer(9)
 def quoteServerChildren_9(data):
-    qouteServerChild = root.createElement('qouteServer')
-    xml.appendChild(qouteServerChild)
+    quoteServerChild = root.createElement('quoteServer')
+    xml.appendChild(quoteServerChild)
 
-    timestampChild(qouteServerChild, getCurrTimestamp())
-    serverChild(qouteServerChild, data[7])
-    transactionNumChild(qouteServerChild, data[0])
-    qouteServerTimeChild(qouteServerChild, data[5])
-    usernameChild(qouteServerChild, data[2])
-    stockSymbolChild(qouteServerChild, data[3])
-    priceChild(qouteServerChild, data[4])
-    cryptokeyChild(qouteServerChild, data[6])
+    timestampChild(quoteServerChild, getCurrTimestamp())
+    serverChild(quoteServerChild, data[7])
+    transactionNumChild(quoteServerChild, data[0])
+    quoteServerTimeChild(quoteServerChild, data[5])
+    usernameChild(quoteServerChild, data[2])
+    stockSymbolChild(quoteServerChild, data[3])
+    priceChild(quoteServerChild, data[4])
+    cryptokeyChild(quoteServerChild, data[6])
 
 
 #trans,command,username,stockname,funds,server,types:systemEvent-database(10)
@@ -171,14 +174,21 @@ def systemEventChildren_10(data):
 
 #trans,command,username,funds,server,types:accountTransaction-add(11)
 def accountTransactionChildren_11(data):
+    print('----------enter 11: ' +str(data)+'--------------')
     accountTransactionChild = root.createElement('accountTransaction')
+    print(data)
     xml.appendChild(accountTransactionChild)
-
+    print(data)
     timestampChild(accountTransactionChild, getCurrTimestamp())
+    print(data)
     serverChild(accountTransactionChild, data[4])
+    print(data)
     transactionNumChild(accountTransactionChild, data[0])
-    actionChild(accountTransactionChild, data[1])
+    print(data)
+    actionChild(accountTransactionChild, 'add')
+    print(data)
     usernameChild(accountTransactionChild, data[2])
+    print(data)
     fundsChild(accountTransactionChild, data[3])
     #print "everything went through"
 
@@ -205,7 +215,27 @@ def systemEventChildren_13(data):
     commandChild(systemEventChild, data[1])
     usernameChild(systemEventChild, data[2])
     stockSymbolChild(systemEventChild, data[3])
-    priceChild(systemEventChild, data[4])
+    fundsChild(systemEventChild, data[4])
+
+#trans,command,username,funds,server,types:accountTransaction-remove(14)
+def accountTransactionChildren_14(data):
+    print('----------enter 11: ' +str(data)+'--------------')
+    accountTransactionChild = root.createElement('accountTransaction')
+    print(data)
+    xml.appendChild(accountTransactionChild)
+    print(data)
+    timestampChild(accountTransactionChild, getCurrTimestamp())
+    print(data)
+    serverChild(accountTransactionChild, data[4])
+    print(data)
+    transactionNumChild(accountTransactionChild, data[0])
+    print(data)
+    actionChild(accountTransactionChild, 'remove')
+    print(data)
+    usernameChild(accountTransactionChild, data[2])
+    print(data)
+    fundsChild(accountTransactionChild, data[3])
+    #print "everything went through"
 
 def errorEventChildren(data):
 
@@ -258,10 +288,10 @@ def actionChild(parent, data):
     actionChild.appendChild(root.createTextNode(data))
     parent.appendChild(actionChild)
 
-def qouteServerTimeChild(parent, data):
-    qouteServerTimeChild = root.createElement('qouteServerTime')
-    qouteServerTimeChild.appendChild(root.createTextNode(data))
-    parent.appendChild(qouteServerTimeChild)
+def quoteServerTimeChild(parent, data):
+    quoteServerTimeChild = root.createElement('quoteServerTime')
+    quoteServerTimeChild.appendChild(root.createTextNode(data))
+    parent.appendChild(quoteServerTimeChild)
 
 def stockSymbolChild(parent, data):
     stockSymbolChild = root.createElement('stockSymbol')
@@ -290,45 +320,48 @@ def errorMessageChild(parent, data):
 
 def detTag(data): #determine the tag of the input
     tag = ''
-    if data[-1] == '1':
+    if data[-1] == "1":
         #types:userCommand-add(1)
         userCommandChildren_1(data)
-    elif data[-1] == '2':
+    elif data[-1] == "2":
         #types:userCommand-quote(2)
         userCommandChildren_2(data)
-    elif data[-1] == '3':
+    elif data[-1] == "3":
         #types:userCommand-buy(3)-sell(3)-setBuyAmount(3)-setSellAmount(3)
         userCommandChildren_3(data)
-    elif data[-1] == '4':
+    elif data[-1] == "4":
         #types:userCommand-commitBuy(4)-commitSell(4)-cancelBuy(4)-cancelSell(4)
         userCommandChildren_4(data)
-    elif data[-1] == '5':
+    elif data[-1] == "5":
         #types:userCommand-cancelSetBuy(5)-cancelSetSell(5)
         userCommandChildren_5(data)
-    elif data[-1] == '6':
+    elif data[-1] == "6":
         #types:userCommand-setBuyTrigger(6)-setSellTrigger(6)
         userCommandChildren_6(data)
-    elif data[-1] == '7':
+    elif data[-1] == "7":
         #types:userCommand-dumplog1(7)
         userCommandChildren_7(data)
-    elif data[-1] == '8':
+    elif data[-1] == "8":
         #types:userCommand-dumplog2(8)
         userCommandChildren_8(data)
-    elif data[-1] == '9':
+    elif data[-1] == "9":
         #types:quoteServer(9)
         quoteServerChildren_9(data)
-    elif data[-1] == '10':
+    elif data[-1] == "10":
         #types:systemEvent-database(10)-setBuyAmount(10)-setSellAmount(10)
         systemEventChildren_10(data)
-    elif data[-1] == '11':
+    elif data[-1] == "11":
+        print('----------' +str(data[-1])+'--------------')
         #types:accountTransaction-add(11)-remove(11)
         accountTransactionChildren_11(data)
-    elif data[-1] == '12':
+    elif data[-1] == "12":
         #types:systemEvent-cancelSetBuy(12)-cancelSetSell(12)
         systemEventChildren_12(data)
-    elif data[-1] == '13':
+    elif data[-1] == "13":
         #types:systemEvent-setBuyTrigger(13)-setSellTrigger(13)
         systemEventChildren_13(data)
+    elif data[-1] == "14":
+        accountTransactionChildren_14(data)
     else:
         tag = "errorEvent"
 
