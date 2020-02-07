@@ -11,25 +11,22 @@ import time
 
 
 class AuditServer(threading.Thread):
-    def __init__(self, logQueue, auditSocket):
+    def __init__(self, time, logQueue, auditSocket):
         threading.Thread.__init__(self)
         self.logQueue = logQueue
         self.auditSocket = auditSocket
+        self.time = time
 
     def run(self):
         while True:
             if len(logQueue) != 0:
+                time.sleep(0.01)
                 data = logQueue.pop(0)
+                if data == "GMAEOVER":
+                    break
                 print("This data must send to aduit server: " + data)
                 auditSocket.send(data)
-
-def triggerRunner(cond, ts):
-    with cond:
-        print("runner start")
-        ts.start()
-        print("runner started")
-        cond.wait()
-        print('runner end')
+                #time.sleep(0.01)
 
 
 def triggers(dataList2, cond):
@@ -161,8 +158,8 @@ def sendToQuote(data):
     fromUser = data
     quoteServerSocket = socket(AF_INET,SOCK_STREAM)
 
-    # quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
-    quoteServerSocket.connect(('192.168.0.10',44432))
+    quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
+    # quoteServerSocket.connect(('192.168.0.10',44432))
 
     quoteServerSocket.send(fromUser)
 
@@ -176,7 +173,7 @@ def sendToQuote(data):
 def recvFromHttp():
     serverSocket = socket(AF_INET, SOCK_STREAM)
     host = ''
-    port = 50004
+    port = 50001
 
     serverSocket.bind((host,port))
 
@@ -196,14 +193,14 @@ def recvFromHttp():
 
                 dataFromQuote = commandControl(data)
 
-
                 print("Data recv from Quote Server: " + dataFromQuote)
 
                 connectSocket.send(dataFromQuote) #Send back to HTTP Server
 
             else:
-                auditSocket.close()
-                break
+                if len(logQueue) == 0:
+                    auditSocket.close()
+                    break
 
 
     except:
@@ -333,6 +330,15 @@ def checkIsTrigger(username, stockname, command):
     else:
         return 0
 
+def getQuoteFromLogs(username, stockname, command):
+    if checkCommandInLog(dataList[2],"QUOTE") == 1:
+        #quote,sym,userid,timestamp,cryptokey
+        check = "SELECT stockprice,stockname,username,times,cryptokey FROM logs WHERE username = %s AND stockname = %s AND command = %s"
+        mycursor.execute(check, (username, stockname, command,))
+        result = mycursor.fetchall()[0]
+        return result
+    else:
+        return 0
 
 def getTriggerStockPrice(username, stockname, command):
     check = "SELECT stockprice FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
@@ -375,6 +381,7 @@ def getAccountSummary(username):
         s += '\n'
     return s
 
+
 def getTriggerSummary(username):
     getTrigger = "SELECT * FROM triggers WHERE username = %s"
     mycursor.execute(getTrigger,(username,))
@@ -385,6 +392,7 @@ def getTriggerSummary(username):
             s += str(j)+' '
         s += '\n'
     return s
+
 
 def getSummary(username):
     transSummary = getLogUser(username)
@@ -404,6 +412,7 @@ def holdMoneyFromAcount(username, amount):
     else:
         return 0
 
+
 def holdStockAmountFromAcount(username, stockname, amount):
     getAmount =  checkStockAmount(username, stockname)
     newAmount = getAmount - Decimal(amount)
@@ -414,6 +423,7 @@ def holdStockAmountFromAcount(username, stockname, amount):
         return 1
     else:
         return 0
+
 
 def updateFunds(username, funds): # update the user acount funds
     updateFormula = "UPDATE acounts SET funds = %s WHERE username = %s"
@@ -448,7 +458,6 @@ def addToStocksDB(user):
         updateStockAmount(user[0], user[1], newShare)
 
 
-
 def addToTriggerDB(user):
     addFormula = "INSERT INTO triggers (username, stockname, command, stockprice, times) VALUES (%s,%s,%s,%s,%s)"
     mycursor.execute(addFormula, user)
@@ -456,9 +465,13 @@ def addToTriggerDB(user):
 
 
 def deleteTriggerFromDB(username, stockname, command):
-    deleteFormula = "DELETE FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
-    mycursor.execute(deleteFormula, (username,stockname,command,))
-    mydb.commit()
+    if checkIsTrigger(username, stockname, command) == 1:
+        deleteFormula = "DELETE FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
+        mycursor.execute(deleteFormula, (username,stockname,command,))
+        mydb.commit()
+        return 1
+    else:
+        return 0
 
 
 def removeFromDB(user): # remove the user funds from DB
@@ -484,7 +497,6 @@ def dbBuySellLogs(logInfo):
 
 
 def deleteBuySellLogs(username, command):
-
     if checkCommandInbsLog(username, command) == 1:
         checkBSLogs = "SELECT * FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
         mycursor.execute(checkBSLogs, (username,))
@@ -501,13 +513,13 @@ def deleteBuySellLogs(username, command):
         deleteFormula = "DELETE FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
         mycursor.execute(deleteFormula, (username,))
         mydb.commit()
-
+        return 1
+    else:
+        return 0
 
 
 def commandControl(data):
     global dataList
-    global dataList2
-    #dataList2 = []
     dataList = data.split(',')
 
     if dataList[1] == "ADD":
@@ -523,20 +535,32 @@ def commandControl(data):
         return data
 
     elif dataList[1] == "QUOTE":
-        newdata = dataList[3] + ',' + dataList[2] + '\r'
-        dataFromQuote = sendToQuote(newdata).rstrip().split(',')
-        dbLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], None, None, getCurrTimestamp(), dataFromQuote[4]))
-        # userid,stockname,stockprice,timestamp,cryptokey
-        result = str(dataList[2])+','+str(dataList[3])+','+dataFromQuote[0]+','+dataFromQuote[3]
+        dataFromLogs = getQuoteFromLogs(dataList[2],dataList[3],dataList[1])
+        if checkIsQuoteStock(dataList[2], dataList[3]) == 1 and in60s(dataFromLogs[3], getCurrTimestamp()) == 1 and dataFromLogs != 0:
+            result = str(dataList[2])+','+str(dataList[3])+','+str(dataFromLogs[0])+','+str(dataFromLogs[3])
+            #trans,command,userid,stockname,server,types:userCommand-quote(2)
+            logQueue.append(data + ',CLT1' + ',2')
 
-        #trans,command,userid,stockname,server,types:userCommand-quote(2)
-        logQueue.append(data + ',CLT1' + ',2')
-        #trans,command,userid,stockname,stockprice,timestamp,cryptokey,server,types:quoteServer(9)
-        logQueue.append(data + ',' + dataFromQuote[0]+','+dataFromQuote[3]+','+dataFromQuote[4] + ',QSRV1' + ',9')
+            return result
 
-        return result
+        else:
+            newdata = dataList[3] + ',' + dataList[2] + '\r'
+            dataFromQuote = sendToQuote(newdata).rstrip().split(',')
+            dbLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], None, None, getCurrTimestamp(), dataFromQuote[4]))
+            # userid,stockname,stockprice,timestamp,cryptokey
+            result = str(dataList[2])+','+str(dataList[3])+','+dataFromQuote[0]+','+dataFromQuote[3]
+
+            #trans,command,userid,stockname,server,types:userCommand-quote(2)
+            logQueue.append(data + ',CLT1' + ',2')
+            #trans,command,userid,stockname,stockprice,timestamp,cryptokey,server,types:quoteServer(9)
+            logQueue.append(data + ',' + dataFromQuote[0]+','+dataFromQuote[3]+','+dataFromQuote[4] + ',QSRV1' + ',9')
+
+            return result
 
     elif dataList[1] == 'BUY':
+        #trans,command,username,stockname,funds,server,types:userCommand-buy(3)
+        logQueue.append(data+','+dataList[4]+',CLT1'+',3')
+
         currFunds = checkAcountFunds(dataList[2])
         if currFunds >= Decimal(dataList[4]):
             newdata = dataList[3] + ',' + dataList[2] + '\r'
@@ -550,8 +574,7 @@ def commandControl(data):
 
                 dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], stockprice, dataList[4], getCurrTimestamp(), crypto))
 
-                #trans,command,username,stockname,funds,server,types:userCommand-buy(3)
-                logQueue.append(data+','+dataList[4]+',CLT1'+',3')
+
                 #trans,command,username,stockname,funds,server,types:systemEvent-database(10)
                 logQueue.append(data+','+dataList[4]+',HSD1'+',10')
 
@@ -565,8 +588,8 @@ def commandControl(data):
 
                 dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], dataList[4], getCurrTimestamp(), dataFromQuote[4]))
 
-                #trans,command,username,stockname,funds,server,types:userCommand-buy(3)
-                logQueue.append(data+','+dataList[4]+',CLT1'+',3')
+                # #trans,command,username,stockname,funds,server,types:userCommand-buy(3)
+                # logQueue.append(data+','+dataList[4]+',CLT1'+',3')
                 #trans,command,username,stockname,funds,server,types:systemEvent-database(10)
                 logQueue.append(data+','+dataList[4]+',HSD1'+',10')
 
@@ -577,6 +600,9 @@ def commandControl(data):
             return "User Funds Not Enough!"
 
     elif dataList[1] == "COMMIT_BUY":
+
+        #trans,command,username,server,types:userCommand-commitBuy(4)
+        logQueue.append(data+',CLT1'+',4')
 
         check_BUY_in_bsLog = checkCommandInbsLog(dataList[2], 'BUY')
 
@@ -605,10 +631,9 @@ def commandControl(data):
                     deleteBuySellLogs(dataList[2],'BUY')
                     updateFunds(dataList[2], userFundsLeft)
 
-                    #trans,command,username,server,types:userCommand-commitBuy(4)
-                    logQueue.append(data+',CLT1'+',4')
+
                     #trans,command,username,funds,server,types:accountTransaction-remove(11)
-                    logQueue.append(dataList[0]+',remove,'+dataList[2]+','+str(snspba[2])+',CLT1'+',14')
+                    logQueue.append(dataList[0]+',remove,'+dataList[2]+','+str(snspba[2])+',CLT1'+',11')
                     #print(dataList[0]+',remove,'+dataList[2]+','+str(snspba[2])+',CLT1'+',14')
 
                     #username,stockname,stockprice,amount,funds
@@ -624,12 +649,20 @@ def commandControl(data):
             return "ERROR BUY COMMAND NOT FIND!"
 
     elif dataList[1] == "CANCEL_BUY":
-        deleteBuySellLogs(dataList[2],'BUY')
-        #trans,command,username,server,types:userCommand-cancelBuy(4)
-        logQueue.append(data+',CLT1'+',4')
-        return "BUY Command has been caneled!"
+        result = deleteBuySellLogs(dataList[2],'BUY')
+        if result == 1:
+            #trans,command,username,server,types:userCommand-cancelBuy(4)
+            logQueue.append(data+',CLT1'+',4')
+            return "BUY Command has been caneled!"
+        else:
+            #trans,command,username,server,types:userCommand-cancelBuy(4)
+            logQueue.append(data+',CLT1'+',4')
+            return "NO BUY COMMAN IN DB"
 
     elif dataList[1] == "SELL":
+
+        #trans,command,username,stockname,funds,server,types:userCommand-sell(3)
+        logQueue.append(data+','+dataList[4]+',CLT1'+','+',3')
 
         if checkUserOwnStock(dataList[2], dataList[3]) == 0:
             return "User does not own the stocks!"
@@ -654,8 +687,7 @@ def commandControl(data):
 
                 dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], stockprice, dataList[4], getCurrTimestamp(), crypto))
 
-                #trans,command,username,stockname,funds,server,types:userCommand-sell(3)
-                logQueue.append(data+','+dataList[4]+',CLT1'+','+',3')
+
                 #trans,command,username,stockname,funds,server,types:systemEvent-database(10)
                 logQueue.append(data+','+dataList[4]+',HSD1'+','+',10')
 
@@ -673,8 +705,8 @@ def commandControl(data):
 
                 dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], dataList[4], getCurrTimestamp(), dataFromQuote[4]))
 
-                #trans,command,username,stockname,funds,server,types:userCommand-sell(3)
-                logQueue.append(data+','+dataList[4]+',CLT1'+','+',3')
+                # #trans,command,username,stockname,funds,server,types:userCommand-sell(3)
+                # logQueue.append(data+','+dataList[4]+',CLT1'+','+',3')
                 #trans,command,username,stockname,funds,server,types:systemEvent-database(10)
                 logQueue.append(data+','+dataList[4]+',HSD1'+','+',10')
 
@@ -687,6 +719,9 @@ def commandControl(data):
 
     elif dataList[1] == "COMMIT_SELL":
         #check to see if user has asked for quote within last 60 seconds
+
+        #trans,command,username,server,types:userCommand-commitBuy(4)
+        logQueue.append(data+',CLT1'+',4')
 
         check_SELL_in_bsLog = checkCommandInbsLog(dataList[2], 'SELL')
 
@@ -718,8 +753,6 @@ def commandControl(data):
                     deleteBuySellLogs(dataList[2],'SELL')
                     updateFunds(dataList[2], newFunds)
 
-                    #trans,command,username,server,types:userCommand-commitBuy(4)
-                    logQueue.append(data+',CLT1'+',4')
                     #trans,command,username,funds,server,types:accountTransaction-add(11)
                     logQueue.append(dataList[0]+',add,'+dataList[2]+','+str(snspfd[2])+',CLT1'+',11')
 
@@ -737,34 +770,43 @@ def commandControl(data):
             return "ERROR SELL COMMAND NOT FIND!"
 
     elif dataList[1] == "CANCEL_SELL":
-        deleteBuySellLogs(dataList[2],'SELL')
-        #trans,command,username,server,types:userCommand-cancelBuy(4)
-        logQueue.append(data+',CLT1'+',4')
-        return " SELL Command has been caneled"
+        result = deleteBuySellLogs(dataList[2],'SELL')
+        if result == 1:
+            #trans,command,username,server,types:userCommand-cancelBuy(4)
+            logQueue.append(data+',CLT1'+',4')
+            return "SELL Command has been caneled"
+        else:
+            #trans,command,username,server,types:userCommand-cancelBuy(4)
+            logQueue.append(data+',CLT1'+',4')
+            return "NO SELL COMMAND IN DB"
 
     elif dataList[1] == "SET_BUY_AMOUNT":
         #trans,command,username,stockname,funds,server,types:userCommand-setBuyAmount(3)
         logQueue.append(data+',CLT1'+',3')
         #trans,command,username,stockname,funds,server,types:systemEvent-setBuyAmount(10)
         logQueue.append(data+',HSD1'+',10')
+
         with cond:
-            print('i am here')
             ts = threading.Thread(target=triggers, args=(dataList, cond))
-            print('-------121212------')
-            #triggerRunner(cond, ts)
+            print('------BUY TRIGGER START------')
+            buyTriggerQueue.append(ts)
             ts.start()
             cond.wait()
-        #ts.join()
+
         return "Trigger is hit running..."
 
     elif dataList[1] == "CANCEL_SET_BUY":
-        #trans,command,username,stockname,server,types:userCommand-cancelSetBuy(5)
-        logQueue.append(data+',CLT1'+',5')
-        #trans,command,username,stockname,server,types:systemEvent-cancelSetBuy(12)
-        logQueue.append(data+',HSD1'+',12')
-
-        deleteTriggerFromDB(dataList[2], dataList[3], 'SET_BUY_TRIGGER')
-        return "CANCEL SET BUY!"
+        result = deleteTriggerFromDB(dataList[2], dataList[3], 'SET_BUY_TRIGGER')
+        if result == 1:
+            #trans,command,username,stockname,server,types:userCommand-cancelSetBuy(5)
+            logQueue.append(data+',CLT1'+',5')
+            #trans,command,username,stockname,server,types:systemEvent-cancelSetBuy(12)
+            logQueue.append(data+',HSD1'+',12')
+            return "CANCEL SET BUY!"
+        else:
+            #trans,command,username,stockname,server,types:userCommand-cancelSetBuy(5)
+            logQueue.append(data+',CLT1'+',5')
+            return "NO BUY TRIGGER"
 
     elif dataList[1] == "SET_BUY_TRIGGER":
         #trans,command,username,stockname,stockprice,server,types:userCommand-setBuyTrigger(6)
@@ -781,16 +823,14 @@ def commandControl(data):
         #trans,command,username,stockname,funds,server,types:systemEvent-setSellAmount(10)
         logQueue.append(data+',HSD1'+',10')
 
-        # dataList2 = []
-        # dataList2.extend(dataList)
         with cond:
-            print('i am here')
             ts = threading.Thread(target=triggers, args=(dataList, cond))
-            print('-------212121------')
-            #triggerRunner(cond, ts)
+            print('------BUY TRIGGER START------')
+
+            sellTriggerQueue.append(ts)
             ts.start()
             cond.wait()
-        #ts.join()
+
         return "Trigger is hit running..."
 
     elif dataList[1] == "SET_SELL_TRIGGER":
@@ -803,13 +843,17 @@ def commandControl(data):
         return "SET SELL TRIGGER!"
 
     elif dataList[1] == "CANCEL_SET_SELL":
-        #trans,command,username,stockname,server,types:userCommand-cancelSetSell(5)
-        logQueue.append(data+',CLT1'+',5')
-        #trans,command,username,stockname,server,types:systemEvent-cancelSetSell(12)
-        logQueue.append(data+',HSD1'+',12')
-
-        deleteTriggerFromDB(dataList[2], dataList[3], 'SET_SELL_TRIGGER')
-        return "CANCEL SET SELL!"
+        result = deleteTriggerFromDB(dataList[2], dataList[3], 'SET_SELL_TRIGGER')
+        if result == 1:
+            #trans,command,username,stockname,server,types:userCommand-cancelSetSell(5)
+            logQueue.append(data+',CLT1'+',5')
+            #trans,command,username,stockname,server,types:systemEvent-cancelSetSell(12)
+            logQueue.append(data+',HSD1'+',12')
+            return "CANCEL SET SELL!"
+        else:
+            #trans,command,username,stockname,server,types:userCommand-cancelSetSell(5)
+            logQueue.append(data+',CLT1'+',5')
+            return "NO SELL TRIGGER"
 
     elif dataList[1] == "DUMPLOG" and len(dataList) == 4:
         #trans,command,username,filename,server,types:userCommand-dumplog1(7)
@@ -831,16 +875,25 @@ def commandControl(data):
 
 if __name__ == '__main__':
     cond = threading.Condition()
+    lock = threading.Lock()
+
     logQueue = []
+    global buyTriggerQueue
+    global sellTriggerQueue
+
+    buyTriggerQueue = []
+    sellTriggerQueue = []
+
     auditIP = '192.168.1.188'
     auditIP2 = "10.0.2.15"
     auditIP3 = "192.168.0.21"
-    auditPort = 55555
+    auditIP4 = "192.168.1.161"
+    auditPort = 55558
 
     auditSocket = socket(AF_INET, SOCK_STREAM)
-    auditSocket.connect((auditIP3,auditPort))
+    auditSocket.connect((auditIP,auditPort))
 
-    AuditServer = AuditServer(logQueue, auditSocket)
+    AuditServer = AuditServer(time, logQueue, auditSocket)
     AuditServer.start()
 
 
@@ -853,5 +906,11 @@ if __name__ == '__main__':
     mycursor = mydb.cursor()
 
     recvFromHttp()
+    for b in buyTriggerQueue:
+        b.join()
+    for s in sellTriggerQueue:
+        s.join()
+    logQueue.append("GAMEOVER")
+
     # print(logQueue)
     AuditServer.join()
