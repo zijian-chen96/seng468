@@ -19,17 +19,22 @@ def main(root):
         while True:
             # transactions = ""
             transactions = connection.recv(1024)
-            transactionsList = transactions.split(',')
-            print(transactionsList, "calling detTage")
+            # transactionsList = transactions.split(',')
+            # print(transactionsList, "calling detTage")
 
             if transactions:
-                list = transactions.split(';;')
-                if len(list) > 1:
+                list = transactions.split("#")
+                print(transactions)
+                if len(list) > 1 and len(list[1]) > 2:
                     for i in list:
-                        detTag(i)
+                        iList = i.split(",")
+                        print(iList, "calling detTage")
+                        detTag(iList)
                 else:
+                    transactionsList = transactions.split(",")
+                    print(transactionsList, "calling detTage")
                     detTag(transactionsList)
-                    
+
             else: ##empty / no transactions received
                 break
 
