@@ -10,6 +10,8 @@ import json
 
 #sudo iptables -A INPUT -p tcp --dport 10000:60000 -j ACCEPT
 #sudo /etc/init.d/mysql restart
+#sudo lsof -i :50000
+#sudo kill -9 50000
 
 
 class AuditServer(threading.Thread):
@@ -20,24 +22,60 @@ class AuditServer(threading.Thread):
         self.time = time
 
     def run(self):
-
         while True:
-
             if logQueue.empty() != True:
-
-                #auditSocket.connect((auditIP4,auditPort))
-                #time.sleep(0.01)
                 data = logQueue.get()
-                if data == "GMAEOVER":
-                    auditSocket.send("GAMEOVER")
-                    break
                 ##print("This data must send to aduit server: " + data)
                 #data = json.dumps(data)
                 auditSocket.send(data)
                 dataFromAudit = auditSocket.recv(1024)
-                ##print('Queue data: '+ data)
-                #time.sleep(1)
-                #auditSocket.close()
+
+
+class jobSystem(threading.Thread):
+    def __init__(self, jobQueue, finQueue, sSocket):
+        threading.Thread.__init__(self)
+        self.jobQueue = jobQueue
+        self.finQueue = finQueue
+        self.sSocket = sSocket
+
+    def run(self):
+        cSocket, addr = self.sSocket.accept()
+        #count = 0
+        try:
+            while True:
+                if self.jobQueue.qsize() < 10001:
+                    data = ""
+                    data = cSocket.recv(1024)
+                    dataList = str(data).split('\n')
+                    if len(dataList) > 1 and dataList[-1] != '':
+                        for i in dataList:
+                            self.jobQueue.put(i)
+                    else:
+                        self.jobQueue.put(dataList[0])
+                else:
+                    data = ""
+                    data = cSocket.recv(1024)
+                    dataList = str(data).split('\n')
+                    if len(dataList) > 1 and dataList[-1] != '':
+                        for i in dataList:
+                            self.jobQueue.put(i)
+                    else:
+                        self.jobQueue.put(dataList[0])
+
+                    for i in self.jobQueue.queue:
+                        #count += 1
+                    self.jobQueue.queue.clear()
+
+                while True:
+                    if finQueue.qsize() > 0:
+                        cSocket.send(finQueue.get())
+                        break
+
+        except:
+            cSocket.send('------SOMETHING WRONG!------')
+            cSocket.close()
+            sys.exit()
+
 
 class TRIGGERS(threading.Thread):
 
@@ -184,8 +222,8 @@ def sendToQuote(data):
     fromUser = data
     quoteServerSocket = socket(AF_INET,SOCK_STREAM)
 
-    quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
-    #quoteServerSocket.connect(('192.168.0.10',44433))
+    #quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
+    quoteServerSocket.connect(('192.168.0.10',44433))
 
     quoteServerSocket.send(fromUser)
 
@@ -196,23 +234,10 @@ def sendToQuote(data):
     return dataFromQuote
 
 
-def recvFromHttp():
-    serverSocket = socket(AF_INET, SOCK_STREAM)
-    host = ''
-    port = 50067
-
-    serverSocket.bind((host,port))
-
-    serverSocket.listen(10)
-
-    #print('Waitting for Connection...')
-
-    connectSocket, addr = serverSocket.accept()
-
+def recvFromHttp(jobQueue):
     try:
         while True:
-            data = ""
-            data = connectSocket.recv(1024)
+            data = jobQueue.get()
             if data:
                 print("Data recv from HTTP Server: " + data)
 
@@ -220,20 +245,14 @@ def recvFromHttp():
 
                 print("Data recv from Quote Server: " + dataFromQuote)
 
-                connectSocket.sendall(dataFromQuote) #Send back to HTTP Server
+                finQueue.put(dataFromQuote)
 
             else:
                 if logQueue.empty():
                     auditSocket.close()
                     break
-
-
     except:
-            connectSocket.send('------SOMETHING WRONG!------')
-            connectSocket.close()
-
-
-    serverSocket.close()
+        sys.exit()
 
 
 def checkAcountFunds(username): # check the acount funds
@@ -392,6 +411,7 @@ def getLogUser(username): # get one user's transation log
     for i in result:
         for j in i:
             s += str(j)+' '
+        s += '\n'
     return s
 
 
@@ -403,6 +423,7 @@ def getLog(): # get all transation log
     for i in result:
         for j in i:
             s += str(j)+' '
+        s += '\n'
     return s
 
 
@@ -414,6 +435,7 @@ def getAccountSummary(username):
     for i in result:
         for j in i:
             s += str(j)+' '
+        s += '\n'
     return s
 
 
@@ -425,6 +447,7 @@ def getTriggerSummary(username):
     for i in result:
         for j in i:
             s += str(j)+' '
+        s += '\n'
     return s
 
 
@@ -556,6 +579,7 @@ def commandControl(data):
     global dataList
     dl = data.split(',')
     dataList = [s.strip() for s in dl]
+    print(dataList)
 
     if dataList[1] == "ADD":
         ##print("Data should be send direct to Aduit Server: " + data)
@@ -1122,9 +1146,9 @@ def commandControl(data):
 
 if __name__ == '__main__':
     cond = threading.Condition()
-    lock = threading.Lock()
+    joblock = threading.Lock()
+    finlock = threading.Lock()
 
-    logQueue = queue.Queue(maxsize = 15000)
     global buyTriggerQueue
     global sellTriggerQueue
 
@@ -1133,20 +1157,34 @@ if __name__ == '__main__':
     #{username-stockname:sellTrigger}
     sellTriggerQueue = {}
 
-    # f = open('auditLog.txt', 'a+')
+    #thread 1 only use to recv command from http
+    jobQueue = queue.Queue(maxsize = 10000)
+    #thread 1 only use for send response back to http
+    finQueue = queue.Queue(maxsize = 10000)
+
+    #thread 2 only use to sent the log to AuditServer
+    logQueue = queue.Queue(maxsize = 10000)
+
+    sSocket = socket(AF_INET, SOCK_STREAM)
+    port = 50000
+    sSocket.bind(('',port))
+    sSocket.listen(10)
 
     auditIP = '192.168.1.188'
     auditIP2 = "10.0.2.15"
     auditIP3 = "192.168.0.21"
     auditIP4 = "192.168.1.161"
     auditIP5 = "192.168.0.17"
-    auditPort = 55607
+    auditPort = 55555
 
     auditSocket = socket(AF_INET, SOCK_STREAM)
     auditSocket.connect((auditIP4,auditPort))
 
     AuditServer = AuditServer(time, logQueue, auditSocket)
     AuditServer.start()
+
+    jobSystem = jobSystem(jobQueue, finQueue, sSocket)
+    jobSystem.start()
 
 
     mydb = mysql.connector.connect(
@@ -1157,7 +1195,7 @@ if __name__ == '__main__':
     )
     mycursor = mydb.cursor()
 
-    recvFromHttp()
+    recvFromHttp(jobQueue)
     # for b in buyTriggerQueue:
     #     b.join()
     # for s in sellTriggerQueue:
