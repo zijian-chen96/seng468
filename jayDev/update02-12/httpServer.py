@@ -33,7 +33,7 @@ def readFile():
 def sendToTrans(alist):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    s.connect((s33,50007))
+    s.connect((s198,50017))
 
     transNum = 0
     for i in alist:
@@ -42,7 +42,7 @@ def sendToTrans(alist):
         newData = ''
         newData = ','.join([str(transNum),i])
         print('newData send -- ' + newData)
-        #s.send(newData)
+        s.send(newData)
         #data = s.recv(1024)
 
         iList = i.split(',')
@@ -51,9 +51,9 @@ def sendToTrans(alist):
 
         if iList[0] == 'DUMPLOG'and len(iList) == 3:
             f = open(iList[2], "w+")
-            s.send(newData)
             while True:
                 data = s.recv(10240)
+                newData = data[-7:]
                 if newData == "the end":
                     break
                 else:
@@ -62,10 +62,10 @@ def sendToTrans(alist):
             f.close()
 
         elif iList[0] == 'DUMPLOG' and len(iList) == 2:
-            f = open(iList[2], "w+")
-            s.send(newData)
+            f = open(iList[1], "w+")
             while True:
                 data = s.recv(10240)
+                newData = data[-7:]
                 if newData == "the end":
                     break
                 else:
@@ -74,16 +74,15 @@ def sendToTrans(alist):
             f.close()
 
         elif iList[0] == "DISPLAY_SUMMARY":
-            s.send(newData)
             while True:
-                data = s.recv(1024)
-                print(data)
+                data = s.recv(10240)
+                print(len(data))
                 newData = data[-7:]
                 if newData == "the end":
+                    print(newData)
                     break
 
         else:
-            s.send(newData)
             data = s.recv(10240)
             if data:
                 print(data)
