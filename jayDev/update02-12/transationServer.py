@@ -29,6 +29,8 @@ class AuditServer(threading.Thread):
                 #data = json.dumps(data)
                 auditSocket.send(data)
                 dataFromAudit = auditSocket.recv(1024)
+                if dataFromAudit == 'finish':
+                    break
 
 
 class jobSystem(threading.Thread):
@@ -87,7 +89,6 @@ class TRIGGERS(threading.Thread):
         self._stop = threading.Event()
         self.dataList2 = []
         self.dataList2.extend(dataList)
-        #dblock = dblock
 
     def stop(self):
         self._stop.set()
@@ -96,6 +97,14 @@ class TRIGGERS(threading.Thread):
         return self._stop.is_set()
 
     def run(self):
+
+        # mydb2 = mysql.connector.connect(
+        #     host="localhost",
+        #     user="root",
+        #     password="rootpassword",
+        #     database="dbone"
+        # )
+        # mycursor = mydb2.cursor()
 
         command = ''
         if self.dataList2[1] == 'SET_BUY_AMOUNT':
@@ -106,38 +115,40 @@ class TRIGGERS(threading.Thread):
         #with cond:
         while command == 'SET_BUY_TRIGGER':
             #dblock.acquire()
-            if checkIsTrigger(self.dataList2[2], self.dataList2[3], command) == 1:
-                buyStockPrice = getTriggerStockPrice(self.dataList2[2], self.dataList2[3], command)
+            if checkIsTrigger(mycursor, self.dataList2[2], self.dataList2[3], command) == 1:
+                buyStockPrice = getTriggerStockPrice(mycursor, self.dataList2[2], self.dataList2[3], command)
 
                 holdMoney = Decimal(self.dataList2[4])
-                if holdMoneyFromAcount(self.dataList2[2], self.dataList2[4]) == 1:
-                    currFunds =  Decimal(checkAcountFunds(self.dataList2[2]))
+                if holdMoneyFromAcount(mycursor, self.dataList2[2], self.dataList2[4]) == 1:
+                    currFunds =  Decimal(getkAcountFunds(mycursor, self.dataList2[2]))
 
                     #time.sleep(0.01)
                     #cond.notifyAll()
 
                     # username, transnumber, command, stockname, stockprice, amount, funds, times, cryptokey
-                    dbLogs((self.dataList2[2], self.dataList2[0], 'BUY-TRIGGER-HOLDER', self.dataList2[3], None, holdMoney, currFunds, getCurrTimestamp(), None))
+                    dbLogs(mycursor, (self.dataList2[2], self.dataList2[0], 'BUY-TRIGGER-HOLDER', self.dataList2[3], None, holdMoney, currFunds, getCurrTimestamp(), None))
                     #dblock.release()
                     while True:
                         if self.stopped():
+                            #dblock.release()
                             return
                         #cond.notifyAll()
                         dataFromQuote = sendToQuote(self.dataList2[3] + ',' + self.dataList2[2] + '\r').split(',')
 
                         if Decimal(dataFromQuote[0]) <= buyStockPrice and Decimal(dataFromQuote[0]) <= holdMoney:
 
-                            #currFunds =  Decimal(checkAcountFunds(dataList[2]))
+                            #currFunds =  Decimal(getkAcountFunds(mycursor, dataList[2]))
 
                             userFundsLeft = (holdMoney % Decimal(dataFromQuote[0])) + currFunds
                             stockAmount = int(holdMoney / Decimal(dataFromQuote[0]))
-                            dblock.acquire()
-                            addToStocksDB((self.dataList2[2],self.dataList2[3],stockAmount))
+                            #dblock.acquire()
+                            addToStocksDB(mycursor, (self.dataList2[2],self.dataList2[3],stockAmount))
                             # username, transnumber, command, stockname, stockprice, amount, funds, times, cryptokey
-                            dbLogs((self.dataList2[2], self.dataList2[0], 'BUY', self.dataList2[3], dataFromQuote[0], self.dataList2[4], currFunds, getCurrTimestamp(), dataFromQuote[4]))
-                            updateFunds(self.dataList2[2],userFundsLeft)
-                            #deleteTriggerFromDB(self.dataList2[2],self.dataList2[3],command)
-                            dblock.release()
+                            dbLogs(mycursor, (self.dataList2[2], self.dataList2[0], 'BUY', self.dataList2[3], dataFromQuote[0], self.dataList2[4], currFunds, getCurrTimestamp(), dataFromQuote[4]))
+                            updateFunds(mycursor, self.dataList2[2],userFundsLeft)
+
+                            #deleteTriggerFromDB(mycursor, self.dataList2[2],self.dataList2[3],command)
+                            #dblock.release()
                             break
 
                         else:
@@ -161,20 +172,21 @@ class TRIGGERS(threading.Thread):
 
         while command == 'SET_SELL_TRIGGER':
             #dblock.acquire()
-            if checkIsTrigger(self.dataList2[2], self.dataList2[3], command) == 1:
-                sellStockPrice = getTriggerStockPrice(self.dataList2[2],self.dataList2[3],command)
-                numStocks = checkStockAmount(self.dataList2[2], self.dataList2[3])
+            if checkIsTrigger(mycursor, self.dataList2[2], self.dataList2[3], command) == 1:
+                sellStockPrice = getTriggerStockPrice(mycursor, self.dataList2[2],self.dataList2[3],command)
+                numStocks = checkStockAmount(mycursor, self.dataList2[2], self.dataList2[3])
                 holdStockAmount = int(Decimal(self.dataList2[4])/sellStockPrice)
-                if numStocks != 0 and holdStockAmountFromAcount(self.dataList2[2], self.dataList2[3], holdStockAmount) == 1:
+                if numStocks != 0 and holdStockAmountFromAcount(mycursor, self.dataList2[2], self.dataList2[3], holdStockAmount) == 1:
 
-                    currFunds = Decimal(checkAcountFunds(self.dataList2[2]))
+                    currFunds = Decimal(getkAcountFunds(mycursor, self.dataList2[2]))
                     #time.sleep(0.01)
                     #cond.notifyAll()
 
-                    dbLogs((self.dataList2[2], self.dataList2[0], 'SELL-TRIGGER-HOLDER', self.dataList2[3], None, holdStockAmount, currFunds, getCurrTimestamp(), None))
+                    dbLogs(mycursor, (self.dataList2[2], self.dataList2[0], 'SELL-TRIGGER-HOLDER', self.dataList2[3], None, holdStockAmount, currFunds, getCurrTimestamp(), None))
                     #dblock.release()
                     while True:
                         if self.stopped():
+                            #dblock.release()
                             return
                         #cond.notifyAll()
                         dataFromQuote = sendToQuote(self.dataList2[3] + ',' + self.dataList2[2] + '\r').split(',')
@@ -185,12 +197,13 @@ class TRIGGERS(threading.Thread):
 
                             moneyCanGet = numStocksToSell * Decimal(dataFromQuote[0])
                             newFunds = currFunds + moneyCanGet
-                            dblock.acquire()
-                            updateStockAmount(self.dataList2[2], self.dataList2[3], (numStocks-numStocksToSell))
-                            dbLogs((self.dataList2[2], self.dataList2[0], 'SELL', self.dataList2[3], dataFromQuote[0], self.dataList2[4], currFunds, getCurrTimestamp(), dataFromQuote[4]))
-                            updateFunds(self.dataList2[2], newFunds)
-                            #deleteTriggerFromDB(self.dataList2[2],self.dataList2[3],command)
-                            dblock.release()
+                            #dblock.acquire()
+                            updateStockAmount(mycursor, self.dataList2[2], self.dataList2[3], (numStocks-numStocksToSell))
+                            dbLogs(mycursor, (self.dataList2[2], self.dataList2[0], 'SELL', self.dataList2[3], dataFromQuote[0], self.dataList2[4], currFunds, getCurrTimestamp(), dataFromQuote[4]))
+                            updateFunds(mycursor, self.dataList2[2], newFunds)
+
+                            #deleteTriggerFromDB(mycursor, self.dataList2[2],self.dataList2[3],command)
+                            #dblock.release()
                             break
 
                         else:
@@ -231,8 +244,8 @@ def sendToQuote(data):
     fromUser = data
     quoteServerSocket = socket(AF_INET,SOCK_STREAM)
 
-    #quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
-    quoteServerSocket.connect(('192.168.0.10',44433))
+    quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
+    #quoteServerSocket.connect(('192.168.0.10',44433))
 
     quoteServerSocket.send(fromUser)
 
@@ -269,31 +282,32 @@ def recvFromHttp(jobQueue, finQueue, sSocket):
         sys.exit()
 
 
-def checkAcountFunds(username): # check the acount funds
+def getkAcountFunds(mycursor, username): # check the acount funds
     check = "SELECT funds FROM acounts WHERE username = %s"
     mycursor.execute(check, (username,))
     return mycursor.fetchall()[0][0]
 
 
-def checkStockAmount(username, stockname): # check the stock amount the user owned
-    if checkUserOwnStock(username, stockname) == 1:
+def checkStockAmount(mycursor, username, stockname): # check the stock amount the user owned
+    if checkUserOwnStock(mycursor, username, stockname) == 1:
         check = "SELECT amount FROM stocks WHERE username = %s and stockname = %s"
         mycursor.execute(check, (username, stockname,))
         return mycursor.fetchall()[0][0]
     else:
         return 0
 
-def checkUserOwnStock(username, stockname):
-    check = "SELECT count(stockname) FROM stocks WHERE username = %s and stockname = %s"
+def checkUserOwnStock(mycursor, username, stockname):
+    check = "SELECT count(username) FROM stocks WHERE username = %s and stockname = %s"
     mycursor.execute(check, (username, stockname,))
     result = mycursor.fetchall()[0][0]
-    if result == 1:
+    if result > 0:
         return 1
     else:
         return 0
 
 
-def checkAcountUser(username): # check is the user already in DB or not
+
+def checkAcountUser(mycursor, username): # check is the user already in DB or not
     check = "SELECT count(%s) FROM acounts WHERE username = %s"
     mycursor.execute(check, (username, username,))
     result = mycursor.fetchall()[0][0]
@@ -303,7 +317,7 @@ def checkAcountUser(username): # check is the user already in DB or not
         return 0
 
 
-def checkStockUser(username, stockname): # check is the user owned the stock
+def checkStockUser(mycursor, username, stockname): # check is the user owned the stock
     check = "SELECT count(stockname) FROM logs WHERE username = %s AND stockname = %s AND command = 'QUOTE'"
     mycursor.execute(check, (username, stockname,))
     result = mycursor.fetchall()[0][0]
@@ -316,8 +330,8 @@ def checkStockUser(username, stockname): # check is the user owned the stock
         return 0
 
 
-def checkLogTimestamp(username, command, stockname):
-    if checkCommandInLog(username,stockname,"QUOTE") == 1:
+def checkLogTimestamp(mycursor, username, command, stockname):
+    if checkCommandInLog(mycursor, username,stockname,"QUOTE") == 1:
         check = "SELECT times FROM logs WHERE username = %s AND command = %s AND stockname = %s ORDER BY transnumber DESC LIMIT 1"
         mycursor.execute(check,(username, command, stockname))
         result = mycursor.fetchall()[0][0]
@@ -326,28 +340,28 @@ def checkLogTimestamp(username, command, stockname):
         return 0
 
 
-def checkbsLogTimestamp(username, command):
+def getbsLogTimestamp(mycursor, username, command):
     check = "SELECT times FROM bslogs WHERE username = %s AND command = %s ORDER BY transnumber DESC LIMIT 1"
     mycursor.execute(check,(username, command,))
     result = mycursor.fetchall()[0][0]
     return result
 
 
-def checkBuyAmount(username):
+def getBuyAmount(mycursor, username):
     check = "SELECT stockname,stockprice,amount FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
     mycursor.execute(check,(username,))
     result = mycursor.fetchall()[0]
     return result
 
 
-def getBuySellData(username, command):
+def getBuySellData(mycursor, username, command):
     check = "SELECT stockname,stockprice,amount FROM bslogs WHERE username = %s AND command = %s ORDER BY transnumber DESC LIMIT 1"
     mycursor.execute(check,(username, command,))
     result = mycursor.fetchall()[0]
     return result
 
 
-def checkCommandInLog(username, stockname, command):
+def checkCommandInLog(mycursor, username, stockname, command):
     check = "SELECT count(username) FROM logs WHERE username = %s AND stockname = %s AND command = %s"
     mycursor.execute(check, (username, stockname, command,))
     result = mycursor.fetchall()[0][0]
@@ -357,7 +371,7 @@ def checkCommandInLog(username, stockname, command):
         return 0
 
 
-def checkCommandInbsLog(username, command):
+def checkCommandInbsLog(mycursor, username, command):
     check = "SELECT count(username) FROM bslogs WHERE username = %s AND command = %s"
     mycursor.execute(check, (username, command,))
     result = mycursor.fetchall()[0][0]
@@ -367,7 +381,7 @@ def checkCommandInbsLog(username, command):
         return 0
 
 
-def checkIsQuoteStock(username, stockname):
+def checkIsQuoteStock(mycursor, username, stockname):
     check = "SELECT count(stockname) FROM logs WHERE username = %s AND stockname = %s"
     mycursor.execute(check, (username, stockname,))
     result = mycursor.fetchall()[0][0]
@@ -377,8 +391,8 @@ def checkIsQuoteStock(username, stockname):
         return 0
 
 
-def checkCrypto(username, stockname, command):
-    if checkCommandInLog(username, stockname, command) == 1:
+def checkCrypto(mycursor, username, stockname, command):
+    if checkCommandInLog(mycursor, username, stockname, command) == 1:
         check = "SELECT cryptokey FROM logs WHERE username = %s AND stockname = %s AND command = %s ORDER BY transnumber DESC LIMIT 1"
         mycursor.execute(check, (username, stockname, command,))
         result = mycursor.fetchall()[0][0]
@@ -387,7 +401,7 @@ def checkCrypto(username, stockname, command):
         return 0
 
 
-def checkIsTrigger(username, stockname, command):
+def checkIsTrigger(mycursor, username, stockname, command):
     check = "SELECT count(command) FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
     mycursor.execute(check, (username, stockname, command,))
     result = mycursor.fetchall()[0][0]
@@ -396,13 +410,13 @@ def checkIsTrigger(username, stockname, command):
     else:
         return 0
 
-def updateTrigger(username, stockname, command, stockprice):
+def updateTrigger(mycursor, username, stockname, command, stockprice):
     updateFormula = "UPDATE triggers SET stockprice = %s WHERE username = %s and stockname = %s and command = %s"
     mycursor.execute(updateFormula, (stockprice, username, stockname, command,))
     mydb.commit()
 
-def getQuoteFromLogs(username, stockname, command):
-    if checkCommandInLog(username, stockname, "QUOTE") == 1:
+def getQuoteFromLogs(mycursor, username, stockname, command):
+    if checkCommandInLog(mycursor, username, stockname, "QUOTE") == 1:
         #quote,sym,userid,timestamp,cryptokey
         check = "SELECT stockprice,stockname,username,times,cryptokey FROM logs WHERE username = %s AND stockname = %s AND command = %s"
         mycursor.execute(check, (username, stockname, command,))
@@ -411,13 +425,13 @@ def getQuoteFromLogs(username, stockname, command):
     else:
         return 0
 
-def getTriggerStockPrice(username, stockname, command):
+def getTriggerStockPrice(mycursor, username, stockname, command):
     check = "SELECT stockprice FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
     mycursor.execute(check, (username, stockname, command,))
     return mycursor.fetchall()[0][0]
 
 
-def getLogUser(username): # get one user's transation log
+def getLogUser(mycursor, username): # get one user's transation log
     getlog = "SELECT * FROM logs WHERE username = %s"
     mycursor.execute(getlog, (username,))
     result = mycursor.fetchall()
@@ -429,7 +443,7 @@ def getLogUser(username): # get one user's transation log
     return s
 
 
-def getLog(): # get all transation log
+def getLog(mycursor): # get all transation log
     getlog = "SELECT * FROM logs"
     mycursor.execute(getlog)
     result = mycursor.fetchall()
@@ -441,7 +455,7 @@ def getLog(): # get all transation log
     return s
 
 
-def getAccountSummary(username):
+def getAccountSummary(mycursor, username):
     getAccount = "SELECT * FROM acounts WHERE username = %s"
     mycursor.execute(getAccount, (username,))
     result = mycursor.fetchall()
@@ -453,7 +467,7 @@ def getAccountSummary(username):
     return s
 
 
-def getTriggerSummary(username):
+def getTriggerSummary(mycursor, username):
     getTrigger = "SELECT * FROM triggers WHERE username = %s"
     mycursor.execute(getTrigger,(username,))
     result = mycursor.fetchall()
@@ -465,15 +479,15 @@ def getTriggerSummary(username):
     return s
 
 
-def getSummary(username):
-    transSummary = getLogUser(username)
-    accountSummary = getAccountSummary(username)
-    triggerSummary = getTriggerSummary(username)
+def getSummary(mycursor, username):
+    transSummary = getLogUser(mycursor, username)
+    accountSummary = getAccountSummary(mycursor, username)
+    triggerSummary = getTriggerSummary(mycursor, username)
     return ('Acount: '+accountSummary+'Trigger_Set: '+triggerSummary+'Transations: '+transSummary)
 
 
-def holdMoneyFromAcount(username, amount):
-    getFunds =  checkAcountFunds(username)
+def holdMoneyFromAcount(mycursor, username, amount):
+    getFunds =  getkAcountFunds(mycursor, username)
     newFunds = getFunds - Decimal(amount)
     if getFunds >= Decimal(amount):
         holdMoneyFormula = "UPDATE acounts SET funds = %s WHERE username = %s"
@@ -484,8 +498,8 @@ def holdMoneyFromAcount(username, amount):
         return 0
 
 
-def holdStockAmountFromAcount(username, stockname, amount):
-    getAmount =  checkStockAmount(username, stockname)
+def holdStockAmountFromAcount(mycursor, username, stockname, amount):
+    getAmount =  checkStockAmount(mycursor, username, stockname)
     newAmount = getAmount - Decimal(amount)
     if getAmount >= Decimal(amount):
         holdStockAmountFormula = "UPDATE stocks SET amount = %s WHERE username = %s"
@@ -496,47 +510,47 @@ def holdStockAmountFromAcount(username, stockname, amount):
         return 0
 
 
-def updateFunds(username, funds): # update the user acount funds
+def updateFunds(mycursor, username, funds): # update the user acount funds
     updateFormula = "UPDATE acounts SET funds = %s WHERE username = %s"
     mycursor.execute(updateFormula, (funds, username,))
     mydb.commit()
 
 
-def updateStockAmount(username, stockname, amount): # update the stock amount the user owned
+def updateStockAmount(mycursor, username, stockname, amount): # update the stock amount the user owned
     updateFormula = "UPDATE stocks SET amount = %s WHERE username = %s AND stockname = %s"
     mycursor.execute(updateFormula, (amount, username, stockname,))
     mydb.commit()
 
 
-def addToDB(user): # # add the user into DB if is not in the DB else update the funds
-    if checkAcountUser(user[0]) == 0:
+def addToDB(mycursor, user): # # add the user into DB if is not in the DB else update the funds
+    if checkAcountUser(mycursor, user[0]) == 0:
         addFormula = "INSERT INTO acounts (username, funds) VALUES (%s, %s)"
         mycursor.execute(addFormula, user)
         mydb.commit()
     else:
-        newFunds = checkAcountFunds(user[0]) + Decimal(user[1])
-        updateFunds(user[0], newFunds)
+        newFunds = getkAcountFunds(mycursor, user[0]) + Decimal(user[1])
+        updateFunds(mycursor, user[0], newFunds)
 
 
-def addToStocksDB(user):
-    if checkUserOwnStock(user[0],user[1]) == 0:
+def addToStocksDB(mycursor, user):
+    if checkUserOwnStock(mycursor, user[0],user[1]) == 0:
         addFormula = "INSERT INTO stocks (username, stockname, amount) VALUES (%s,%s,%s)"
         mycursor.execute(addFormula, user)
         mydb.commit()
     else:
-        oldShare = checkStockAmount(user[0], user[1])
+        oldShare = checkStockAmount(mycursor, user[0], user[1])
         newShare = user[2] + oldShare
-        updateStockAmount(user[0], user[1], newShare)
+        updateStockAmount(mycursor, user[0], user[1], newShare)
 
 
-def addToTriggerDB(user):
+def addToTriggerDB(mycursor, user):
     addFormula = "INSERT INTO triggers (username, stockname, command, stockprice, times) VALUES (%s,%s,%s,%s,%s)"
     mycursor.execute(addFormula, user)
     mydb.commit()
 
 
-def deleteTriggerFromDB(username, stockname, command):
-    if checkIsTrigger(username, stockname, command) == 1:
+def deleteTriggerFromDB(mycursor, username, stockname, command):
+    if checkIsTrigger(mycursor, username, stockname, command) == 1:
         deleteFormula = "DELETE FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
         mycursor.execute(deleteFormula, (username,stockname,command,))
         mydb.commit()
@@ -545,40 +559,40 @@ def deleteTriggerFromDB(username, stockname, command):
         return 0
 
 
-def removeFromDB(user): # remove the user funds from DB
-    currFunds = checkAcountFunds(user[0])
+def removeFromDB(mycursor, user): # remove the user funds from DB
+    currFunds = getkAcountFunds(mycursor, user[0])
     if currFunds >= user[1]:
         newFunds = currFunds - user[1]
-        updateFunds(user[0], newFunds)
+        updateFunds(mycursor, user[0], newFunds)
     else:
         print("Acount funds is not enough!")
 
 
-def dbLogs(logInfo):
+def dbLogs(mycursor, logInfo):
     ##print('here')
     logFormula = "INSERT INTO logs (username, transnumber, command, stockname, stockprice, amount, funds, times, cryptokey) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)"
     mycursor.execute(logFormula, logInfo)
     mydb.commit()
 
 
-def dbBuySellLogs(logInfo):
+def dbBuySellLogs(mycursor, logInfo):
     logFormula = "INSERT INTO bslogs (username, transnumber, command, stockname, stockprice, amount, times, cryptokey) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)"
     mycursor.execute(logFormula, logInfo)
     mydb.commit()
 
 
-def deleteBuySellLogs(username, command):
-    if checkCommandInbsLog(username, command) == 1:
+def deleteBuySellLogs(mycursor, username, command):
+    if checkCommandInbsLog(mycursor, username, command) == 1:
         checkBSLogs = "SELECT * FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
         mycursor.execute(checkBSLogs, (username,))
         result = mycursor.fetchall()[0]
 
         #calculate the currFunds
-        accountFunds = checkAcountFunds(username)
+        accountFunds = getkAcountFunds(mycursor, username)
         currFunds = accountFunds - result[5]
 
         #add to dbLogs
-        dbLogs((result[0], result[1], result[2], result[3], result[4], result[5], (currFunds+result[5]), getCurrTimestamp(), result[7]))
+        dbLogs(mycursor, (result[0], result[1], result[2], result[3], result[4], result[5], (currFunds+result[5]), getCurrTimestamp(), result[7]))
 
         #remove from bslogs
         deleteFormula = "DELETE FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
@@ -598,8 +612,8 @@ def commandControl(data, cSocket):
     if dataList[1] == "ADD":
         ##print("Data should be send direct to Aduit Server: " + data)
         #dblock.acquire()
-        addToDB((dataList[2], dataList[3]))
-        dbLogs((dataList[2], dataList[0], dataList[1], None, None, None, dataList[3], getCurrTimestamp(), None))
+        addToDB(mycursor, (dataList[2], dataList[3]))
+        dbLogs(mycursor, (dataList[2], dataList[0], dataList[1], None, None, None, dataList[3], getCurrTimestamp(), None))
 
         #trans,command,username,funds,server,types:userCommand-add(1)
         dataToAudit = ",".join([data,"CLT1","one"])
@@ -622,9 +636,9 @@ def commandControl(data, cSocket):
 
     elif dataList[1] == "QUOTE":
         #dblock.acquire()
-        dataFromLogs = getQuoteFromLogs(dataList[2],dataList[3],dataList[1])
+        dataFromLogs = getQuoteFromLogs(mycursor, dataList[2],dataList[3],dataList[1])
 
-        if dataFromLogs != 0 and checkIsQuoteStock(dataList[2], dataList[3]) == 1 and in60s(dataFromLogs[3], getCurrTimestamp()) == 1:
+        if dataFromLogs != 0 and checkIsQuoteStock(mycursor, dataList[2], dataList[3]) == 1 and in60s(dataFromLogs[3], getCurrTimestamp()) == 1:
 
             result = str(dataList[2])+','+str(dataList[3])+','+str(dataFromLogs[0])+','+str(dataFromLogs[3])
             #trans,command,userid,stockname,server,types:userCommand-quote(2)
@@ -644,7 +658,7 @@ def commandControl(data, cSocket):
 
             newdata = dataList[3] + ',' + dataList[2] + '\r'
             dataFromQuote = sendToQuote(newdata).strip().split(',')
-            dbLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], None, None, getCurrTimestamp(), dataFromQuote[4]))
+            dbLogs(mycursor, (dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], None, None, getCurrTimestamp(), dataFromQuote[4]))
             # userid,stockname,stockprice,timestamp,cryptokey
             result = str(dataList[2])+','+str(dataList[3])+','+dataFromQuote[0]+','+dataFromQuote[3]
 
@@ -678,16 +692,16 @@ def commandControl(data, cSocket):
         #f.write(data+','+"CLT1"+',three\n')
         logQueue.put(dataToAudit)
 
-        currFunds = checkAcountFunds(dataList[2])
+        currFunds = getkAcountFunds(mycursor, dataList[2])
         if currFunds >= Decimal(dataList[4]):
             newdata = dataList[3] + ',' + dataList[2] + '\r'
-            stockprice = checkStockUser(dataList[2], dataList[3])
+            stockprice = checkStockUser(mycursor, dataList[2], dataList[3])
 
             commandTimestamp = getCurrTimestamp()
-            logTimestamp = checkLogTimestamp(dataList[2],'QUOTE',dataList[3])
-            crypto = checkCrypto(dataList[2], dataList[3], 'QUOTE')
+            logTimestamp = checkLogTimestamp(mycursor, dataList[2],'QUOTE',dataList[3])
+            crypto = checkCrypto(mycursor, dataList[2], dataList[3], 'QUOTE')
             if logTimestamp != 0 and stockprice > 0 and (in60s(logTimestamp, commandTimestamp) == 1):
-                dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], stockprice, dataList[4], getCurrTimestamp(), crypto))
+                dbBuySellLogs(mycursor, (dataList[2], dataList[0], dataList[1], dataList[3], stockprice, dataList[4], getCurrTimestamp(), crypto))
 
                 #trans,command,username,stockname,funds,server,types:systemEvent-database(10)
                 dataToAudit = ",".join([data,"HSD1","ten"])
@@ -707,7 +721,7 @@ def commandControl(data, cSocket):
             else:
                 dataFromQuote = sendToQuote(newdata).split(',')
 
-                dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], dataList[4], getCurrTimestamp(), dataFromQuote[4]))
+                dbBuySellLogs(mycursor, (dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], dataList[4], getCurrTimestamp(), dataFromQuote[4]))
 
                 # #trans,command,username,stockname,funds,server,types:userCommand-buy(3)
                 # logQueue.put(data+','+dataList[4]+',CLT1'+',3')
@@ -740,33 +754,33 @@ def commandControl(data, cSocket):
         #dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'server': "CLT1", 'types': '4'}
         logQueue.put(dataToAudit)
 
-        check_BUY_in_bsLog = checkCommandInbsLog(dataList[2], 'BUY')
+        check_BUY_in_bsLog = checkCommandInbsLog(mycursor, dataList[2], 'BUY')
 
         if check_BUY_in_bsLog == 0:
 
             #dblock.release()
             return "There is no buy command input!"
 
-        stockname = getBuySellData(dataList[2], 'BUY')[0]
+        stockname = getBuySellData(mycursor, dataList[2], 'BUY')[0]
 
         if check_BUY_in_bsLog == 1:
 
             commitTimestamp = getCurrTimestamp()
-            logTimestamp = checkbsLogTimestamp(dataList[2],'BUY')
+            logTimestamp = getbsLogTimestamp(mycursor, dataList[2],'BUY')
 
-            if checkIsQuoteStock(dataList[2], stockname) == 1 and in60s(logTimestamp, commitTimestamp) == 1:
+            if checkIsQuoteStock(mycursor, dataList[2], stockname) == 1 and in60s(logTimestamp, commitTimestamp) == 1:
 
-                currFunds =  Decimal(checkAcountFunds(dataList[2]))
-                snspba = checkBuyAmount(dataList[2])
+                currFunds =  Decimal(getkAcountFunds(mycursor, dataList[2]))
+                snspba = getBuyAmount(mycursor, dataList[2])
 
                 if currFunds >= snspba[2]:
 
                     userFundsLeft = (snspba[2] % snspba[1]) + (currFunds - snspba[2])
                     stockAmount = int(snspba[2] / snspba[1])
 
-                    addToStocksDB((dataList[2],snspba[0],stockAmount))
-                    deleteBuySellLogs(dataList[2],'BUY')
-                    updateFunds(dataList[2], userFundsLeft)
+                    addToStocksDB(mycursor, (dataList[2],snspba[0],stockAmount))
+                    deleteBuySellLogs(mycursor, dataList[2],'BUY')
+                    updateFunds(mycursor, dataList[2], userFundsLeft)
 
                     #trans,command,username,funds,server,types:accountTransaction-remove(11)
                     dataToAudit = ",".join([dataList[0],'remove',dataList[2],str(snspba[2]),"CLT1","eleven"])
@@ -800,7 +814,7 @@ def commandControl(data, cSocket):
     elif dataList[1] == "CANCEL_BUY":
         #dblock.acquire()
 
-        result = deleteBuySellLogs(dataList[2],'BUY')
+        result = deleteBuySellLogs(mycursor, dataList[2],'BUY')
         if result == 1:
             #trans,command,username,server,types:userCommand-cancelBuy(4)
             dataToAudit = ",".join([data,"CLT1","four"])
@@ -834,18 +848,18 @@ def commandControl(data, cSocket):
         #f.write(data+','+"CLT1"+',three\n')
         #dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'funds': dataList[4], 'server': "CLT1", 'types': '3'}
         logQueue.put(dataToAudit)
-        if checkUserOwnStock(dataList[2], dataList[3]) == 0:
+        if checkUserOwnStock(mycursor, dataList[2], dataList[3]) == 0:
 
             #dblock.release()
             return "User does not own the stocks!"
 
-        amount = checkStockAmount(dataList[2], dataList[3])
+        amount = checkStockAmount(mycursor, dataList[2], dataList[3])
 
         if amount > 0:
             commandTimestamp = getCurrTimestamp()
-            logTimestamp = checkLogTimestamp(dataList[2],'QUOTE',dataList[3])
-            if logTimestamp != 0 and checkCommandInLog(dataList[2], dataList[3], "QUOTE") == 1 and in60s(logTimestamp, commandTimestamp) == 1:
-                stockprice = checkStockUser(dataList[2], dataList[3])
+            logTimestamp = checkLogTimestamp(mycursor, dataList[2],'QUOTE',dataList[3])
+            if logTimestamp != 0 and checkCommandInLog(mycursor, dataList[2], dataList[3], "QUOTE") == 1 and in60s(logTimestamp, commandTimestamp) == 1:
+                stockprice = checkStockUser(mycursor, dataList[2], dataList[3])
 
                 ownMoney = stockprice * Decimal(amount)
 
@@ -854,9 +868,9 @@ def commandControl(data, cSocket):
                     #dblock.release()
                     return "User money is not enough!"
 
-                crypto = checkCrypto(dataList[2], dataList[3], 'QUOTE')
+                crypto = checkCrypto(mycursor, dataList[2], dataList[3], 'QUOTE')
 
-                dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], stockprice, dataList[4], getCurrTimestamp(), crypto))
+                dbBuySellLogs(mycursor, (dataList[2], dataList[0], dataList[1], dataList[3], stockprice, dataList[4], getCurrTimestamp(), crypto))
 
                 #trans,command,username,stockname,funds,server,types:systemEvent-database(10)
                 dataToAudit = ",".join([data,"HSD1","ten"])
@@ -881,7 +895,7 @@ def commandControl(data, cSocket):
                     #dblock.release()
                     return "User money is not enough!"
 
-                dbBuySellLogs((dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], dataList[4], getCurrTimestamp(), dataFromQuote[4]))
+                dbBuySellLogs(mycursor, (dataList[2], dataList[0], dataList[1], dataList[3], dataFromQuote[0], dataList[4], getCurrTimestamp(), dataFromQuote[4]))
 
                 # #trans,command,username,stockname,funds,server,types:userCommand-sell(3)
                 # logQueue.put(data+','+dataList[4]+',CLT1'+','+',3')
@@ -917,25 +931,25 @@ def commandControl(data, cSocket):
         #dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'server': "CLT1", 'types': '4'}
         logQueue.put(dataToAudit)
 
-        check_SELL_in_bsLog = checkCommandInbsLog(dataList[2], 'SELL')
+        check_SELL_in_bsLog = checkCommandInbsLog(mycursor, dataList[2], 'SELL')
 
         if check_SELL_in_bsLog == 0:
 
             #dblock.release()
             return "There is no sell command input!"
 
-        stockname = getBuySellData(dataList[2], 'SELL')[0]
-        amount = checkStockAmount(dataList[2], stockname)
+        stockname = getBuySellData(mycursor, dataList[2], 'SELL')[0]
+        amount = checkStockAmount(mycursor, dataList[2], stockname)
 
-        if checkCommandInbsLog(dataList[2], 'SELL') == 1 and amount > 0:
+        if checkCommandInbsLog(mycursor, dataList[2], 'SELL') == 1 and amount > 0:
 
             commitTime = getCurrTimestamp()
-            logTimestamp = checkbsLogTimestamp(dataList[2],'SELL')
+            logTimestamp = getbsLogTimestamp(mycursor, dataList[2],'SELL')
 
-            if checkIsQuoteStock(dataList[2], stockname) == 1 and in60s(logTimestamp, commitTime) == 1:
+            if checkIsQuoteStock(mycursor, dataList[2], stockname) == 1 and in60s(logTimestamp, commitTime) == 1:
 
-                currFunds =  Decimal(checkAcountFunds(dataList[2]))
-                snspfd = getBuySellData(dataList[2], 'SELL')
+                currFunds =  Decimal(getkAcountFunds(mycursor, dataList[2]))
+                snspfd = getBuySellData(mycursor, dataList[2], 'SELL')
 
                 total = amount * snspfd[1]
                 if total >= snspfd[2]:
@@ -945,9 +959,9 @@ def commandControl(data, cSocket):
                     newFunds = currFunds + moneyCanGet
                     shareLeft = amount - amountCanSell
 
-                    updateStockAmount(dataList[2], snspfd[0], shareLeft)
-                    deleteBuySellLogs(dataList[2],'SELL')
-                    updateFunds(dataList[2], newFunds)
+                    updateStockAmount(mycursor, dataList[2], snspfd[0], shareLeft)
+                    deleteBuySellLogs(mycursor, dataList[2],'SELL')
+                    updateFunds(mycursor, dataList[2], newFunds)
 
                     #trans,command,username,funds,server,types:accountTransaction-add(11)
                     dataToAudit = ",".join([dataList[0],'add',dataList[2],str(snspfd[2]),"CLT1","eleven"])
@@ -980,7 +994,7 @@ def commandControl(data, cSocket):
     elif dataList[1] == "CANCEL_SELL":
         #dblock.acquire()
 
-        result = deleteBuySellLogs(dataList[2],'SELL')
+        result = deleteBuySellLogs(mycursor, dataList[2],'SELL')
         if result == 1:
             #trans,command,username,server,types:userCommand-cancelBuy(4)
             dataToAudit = ",".join([data,"CLT1","four"])
@@ -1047,7 +1061,7 @@ def commandControl(data, cSocket):
     elif dataList[1] == "CANCEL_SET_BUY":
         #dblock.acquire()
 
-        result = deleteTriggerFromDB(dataList[2], dataList[3], 'SET_BUY_TRIGGER')
+        result = deleteTriggerFromDB(mycursor, dataList[2], dataList[3], 'SET_BUY_TRIGGER')
         diName = dataList[2]+'-'+dataList[3]
 
         if result == 1 and diName in buyTriggerQueue and buyTriggerQueue.get(diName).isAlive():
@@ -1102,10 +1116,10 @@ def commandControl(data, cSocket):
         #dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'funds': dataList[4], 'server': "HSD1", 'types': '13'}
         logQueue.put(dataToAudit)
 
-        if checkIsTrigger(dataList[2], dataList[3], dataList[1]) == 1:
-            updateTrigger(dataList[2], dataList[3], dataList[1], dataList[4])
+        if checkIsTrigger(mycursor, dataList[2], dataList[3], dataList[1]) == 1:
+            updateTrigger(mycursor, dataList[2], dataList[3], dataList[1], dataList[4])
         else:
-            addToTriggerDB((dataList[2], dataList[3], dataList[1], dataList[4], getCurrTimestamp()))
+            addToTriggerDB(mycursor, (dataList[2], dataList[3], dataList[1], dataList[4], getCurrTimestamp()))
 
             #dblock.release()
         return "SET BUY TRIGGER!"
@@ -1166,10 +1180,10 @@ def commandControl(data, cSocket):
         #dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'funds': dataList[4], 'server': "HSD1", 'types': '13'}
         logQueue.put(dataToAudit)
 
-        if checkIsTrigger(dataList[2], dataList[3], dataList[1]) == 1:
-            updateTrigger(dataList[2], dataList[3], dataList[1], dataList[4])
+        if checkIsTrigger(mycursor, dataList[2], dataList[3], dataList[1]) == 1:
+            updateTrigger(mycursor, dataList[2], dataList[3], dataList[1], dataList[4])
         else:
-            addToTriggerDB((dataList[2], dataList[3], dataList[1], dataList[4], getCurrTimestamp()))
+            addToTriggerDB(mycursor, (dataList[2], dataList[3], dataList[1], dataList[4], getCurrTimestamp()))
 
             #dblock.release()
         return "SET SELL TRIGGER!"
@@ -1177,7 +1191,7 @@ def commandControl(data, cSocket):
     elif dataList[1] == "CANCEL_SET_SELL":
         #dblock.acquire()
 
-        result = deleteTriggerFromDB(dataList[2], dataList[3], 'SET_SELL_TRIGGER')
+        result = deleteTriggerFromDB(mycursor, dataList[2], dataList[3], 'SET_SELL_TRIGGER')
         diName = dataList[2]+'-'+dataList[3]
         if result == 1 and diName in sellTriggerQueue and sellTriggerQueue.get(diName).isAlive():
             #trans,command,username,stockname,server,types:userCommand-cancelSetSell(5)
@@ -1221,7 +1235,7 @@ def commandControl(data, cSocket):
         #dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'filename': dataList[3], 'server': "CLT1", 'types': '7'}
         logQueue.put(dataToAudit)
 
-        result = getLogUser(dataList[2])
+        result = getLogUser(mycursor, dataList[2])
         cSocket.sendall(result)
         return "the end"
 
@@ -1233,7 +1247,7 @@ def commandControl(data, cSocket):
         #f.write(data+',CLT1'+',eight\n')
         #dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'filename': dataList[2], 'server': "CLT1", 'types': '8'}
         logQueue.put(dataToAudit)
-        result = getLog()
+        result = getLog(mycursor, )
         cSocket.send(result)
         return "the end"
 
@@ -1247,7 +1261,7 @@ def commandControl(data, cSocket):
         #f.write(data+',CLT1'+',four\n')
         #dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'server': "CLT1", 'types': '4'}
         logQueue.put(dataToAudit)
-        result = getSummary(dataList[2])
+        result = getSummary(mycursor, dataList[2])
         cSocket.sendall(result)
 
         #dblock.release()
@@ -1282,21 +1296,22 @@ if __name__ == '__main__':
     # fSocket.bind(('',port))
     # fSocket.listen(10)
 
-    # auditIP = '192.168.1.188'
-    # auditIP2 = "10.0.2.15"
-    # auditIP3 = "192.168.0.21"
-    # auditIP4 = "192.168.1.161"
-    # auditIP5 = "192.168.0.17"
-    # auditPort = 51000
-    #
-    # auditSocket = socket(AF_INET, SOCK_STREAM)
-    # auditSocket.connect((auditIP,auditPort))
-    #
-    # AuditServer = AuditServer(time, logQueue, auditSocket)
-    # AuditServer.start()
+    auditIP = '192.168.1.188'
+    auditIP2 = "10.0.2.15"
+    auditIP3 = "192.168.0.21"
+    auditIP4 = "192.168.1.161"
+    auditIP5 = "192.168.0.17"
+    auditPort = 51017
+
+    auditSocket = socket(AF_INET, SOCK_STREAM)
+    auditSocket.connect((auditIP4,auditPort))
+
+    AuditServer = AuditServer(time, logQueue, auditSocket)
+    AuditServer.deamon = True
+    AuditServer.start()
 
     sSocket = socket(AF_INET, SOCK_STREAM)
-    port = 50007
+    port = 50017
     sSocket.bind(('',port))
     sSocket.listen(10)
     # cSocket, addr = sSocket.accept()
