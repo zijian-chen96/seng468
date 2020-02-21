@@ -9,9 +9,9 @@ def main(root):
 
     save_path_file = "logsfile.xml"
 
-    f = open(save_path_file, 'a+')
+    with open(save_path_file, 'a') as f:
 
-    f.write(xml_str + '\t')
+        f.write(xml_str + '\t')
 
     sSocket = socket(AF_INET, SOCK_STREAM)
     #print('this is the audit server')
@@ -24,24 +24,22 @@ def main(root):
     #print('accepted')
     try:
         while True:
-            # transactions = ""
+            transactions = ""
             transactions = connection.recv(1024).decode()
-            #print(transactions)
-            #stripped_line = [s.rstrip() for s in line]
-            sb = transactions.split(',')
-            transactionsList = [s.strip() for s in sb]
+            if transactions != "":
 
-            #tolog(tag, transactions[1])
-            if transactions:
-                print(transactions)
-                print(transactionsList, "calling detTage")
+                sb = transactions.split(',')
+                transactionsList = [s.strip() for s in sb]
+
+                #tolog(tag, transactions[1])
+
                 node = detTag(transactionsList)
                 xml_str = node.toprettyxml(indent='\t\t', newl='\n\t')
-                f.write(xml_str)
+                with open('logsfile.xml', 'a') as f:
+                    f.write(xml_str)
+                #connection.sendall(('next').encode())
 
-                connection.send(('next').encode())
-
-    except IOError:
+    except:
         print('error 11')
         connection.send("error")
         connection.close()

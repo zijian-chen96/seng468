@@ -17,20 +17,26 @@ import json
 
 
 class AuditServer(threading.Thread):
-    def __init__(self, time, logQueue, auditSocket):
+    def __init__(self, time, logQueue):
         threading.Thread.__init__(self)
         self.logQueue = logQueue
-        self.auditSocket = auditSocket
         self.time = time
 
     def run(self):
+
+        auditSocket = socket(AF_INET, SOCK_STREAM)
+        auditSocket.connect(('',51000))
+
         while True:
-            if logQueue.empty() != True:
-                data = logQueue.get()
-                #print("This data must send to aduit server: " + data)
+            if self.logQueue.empty() != True:
+                data = self.logQueue.get()
+
                 #data = json.dumps(data)
-                auditSocket.send(data.encode())
-                dataFromAudit = auditSocket.recv(1024).decode()
+                auditSocket.sendall(data.encode())
+                #dataFromAudit = auditSocket.recv(1024).decode()
+                #print(dataFromAudit)
+
+                #print("This data must send to aduit server: " + data)
 
 
 class jobSystem(threading.Thread):
@@ -237,11 +243,11 @@ def recvFromHttp(jobQueue, finQueue, sSocket):
             # data = jobQueue.get()
             data = cSocket.recv(1024).decode()
             if data:
-                #print("Data recv from HTTP Server: " + data)
+                print("Data recv from HTTP Server: " + data)
 
                 dataFromQuote = commandControl(data, cSocket)
 
-                #print("Data recv from Quote Server: " + dataFromQuote)
+                print("Data send to Quote Server: " + dataFromQuote)
 
                 cSocket.sendall(dataFromQuote.encode())
                 #finQueue.put(dataFromQuote)
@@ -1174,11 +1180,7 @@ def commandControl(data, cSocket):
         return "the end"
 
 if __name__ == '__main__':
-    global dblock
-    global joblock
-    dblock = threading.Lock()
-    joblock = threading.Lock()
-    finlock = threading.Lock()
+    global logQueue
 
     global buyTriggerQueue
     global sellTriggerQueue
@@ -1202,17 +1204,8 @@ if __name__ == '__main__':
     # fSocket.bind(('',port))
     # fSocket.listen(10)
 
-    auditIP = '192.168.1.188'
-    auditIP2 = "10.0.2.15"
-    auditIP3 = "192.168.0.21"
-    auditIP4 = "192.168.1.161"
-    auditIP5 = "192.168.0.17"
-    auditPort = 51000
 
-    auditSocket = socket(AF_INET, SOCK_STREAM)
-    auditSocket.connect(('',auditPort))
-
-    AuditServer = AuditServer(time, logQueue, auditSocket)
+    AuditServer = AuditServer(time, logQueue)
     AuditServer.start()
 
     sSocket = socket(AF_INET, SOCK_STREAM)
@@ -1237,11 +1230,8 @@ if __name__ == '__main__':
     mycursor = mydb.cursor()
 
     recvFromHttp(jobQueue, finQueue, sSocket)
-    # for b in buyTriggerQueue:
-    #     b.join()
-    # for s in sellTriggerQueue:
-    #     s.join()
+
+
     #logQueue.put("GAMEOVER")
 
-    # #print(logQueue)
-    #AuditServer.join()
+    AuditServer.join()
