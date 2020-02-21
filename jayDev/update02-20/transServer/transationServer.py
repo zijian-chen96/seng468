@@ -12,6 +12,8 @@ import json
 #sudo /etc/init.d/mysql restart
 #sudo lsof -i :50000
 #sudo kill -9 50000
+#sudo docker cp update0220_auditserver_1:/auditServer/logsfile.xml logsfile.xml
+
 
 
 class AuditServer(threading.Thread):
@@ -25,12 +27,10 @@ class AuditServer(threading.Thread):
         while True:
             if logQueue.empty() != True:
                 data = logQueue.get()
-                ##print("This data must send to aduit server: " + data)
+                #print("This data must send to aduit server: " + data)
                 #data = json.dumps(data)
                 auditSocket.send(data.encode())
                 dataFromAudit = auditSocket.recv(1024).decode()
-                if dataFromAudit == 'finish':
-                    break
 
 
 class jobSystem(threading.Thread):
@@ -69,12 +69,6 @@ class jobSystem(threading.Thread):
                     for i in self.jobQueue.queue:
                         count += 1
                     self.jobQueue.queue.clear()
-
-                # while True:
-                #     if finQueue.qsize() > 0:
-                #         print('finQueue size is : -- '+ str(finQueue.qsize()))
-                #         cSocket.send(finQueue.get())
-                #         break
 
         except:
             cSocket.send('------SOMETHING WRONG!------')
@@ -150,11 +144,11 @@ class TRIGGERS(threading.Thread):
                     break
 
                 else:
-                    print("User funds is not enough!")
+                    #print("User funds is not enough!")
                     break
 
             else:
-                print('TRIGGER NOT FOUND!')
+                #print('TRIGGER NOT FOUND!')
                 break
 
         while command == 'SET_SELL_TRIGGER':
@@ -197,10 +191,10 @@ class TRIGGERS(threading.Thread):
                     break
 
                 else:
-                    print("User stock amount is not enough!")
+                    #print("User stock amount is not enough!")
                     break
             else:
-                print('TRIGGER NOT FOUND!')
+                #print('TRIGGER NOT FOUND!')
                 break
 
 
@@ -243,11 +237,11 @@ def recvFromHttp(jobQueue, finQueue, sSocket):
             # data = jobQueue.get()
             data = cSocket.recv(1024).decode()
             if data:
-                print("Data recv from HTTP Server: " + data)
+                #print("Data recv from HTTP Server: " + data)
 
                 dataFromQuote = commandControl(data, cSocket)
 
-                print("Data recv from Quote Server: " + dataFromQuote)
+                #print("Data recv from Quote Server: " + dataFromQuote)
 
                 cSocket.sendall(dataFromQuote.encode())
                 #finQueue.put(dataFromQuote)
@@ -422,7 +416,7 @@ def getLogUser(mycursor, mydb, username): # get one user's transation log
     return s
 
 
-def getLog(mycursor): # get all transation log
+def getLog(mycursor, mydb): # get all transation log
     getlog = "SELECT * FROM logs"
     mycursor.execute(getlog)
     result = mycursor.fetchall()
@@ -585,7 +579,7 @@ def deleteBuySellLogs(mycursor, mydb, username, command):
 def commandControl(data, cSocket):
     dl = data.split(',')
     dataList = [s.strip() for s in dl]
-    print(dataList)
+    #print(dataList)
 
     if dataList[1] == "ADD":
         ##print("Data should be send direct to Aduit Server: " + data)
@@ -1162,8 +1156,8 @@ def commandControl(data, cSocket):
         #f.write(data+',CLT1'+',eight\n')
         #dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'filename': dataList[2], 'server': "CLT1", 'types': '8'}
         logQueue.put(dataToAudit)
-        result = getLog(mycursor, mydb, )
-        cSocket.send(result.encode())
+        result = getLog(mycursor, mydb)
+        cSocket.sendal(result.encode())
         return "the end"
 
     elif dataList[1] == "DISPLAY_SUMMARY":
@@ -1219,7 +1213,6 @@ if __name__ == '__main__':
     auditSocket.connect(('',auditPort))
 
     AuditServer = AuditServer(time, logQueue, auditSocket)
-    AuditServer.deamon = True
     AuditServer.start()
 
     sSocket = socket(AF_INET, SOCK_STREAM)

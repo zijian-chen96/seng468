@@ -5,6 +5,14 @@ from datetime import datetime
 #xmllint --schema logfile.xsd --noout logsfile.xml
 
 def main(root):
+    xml_str = root.toprettyxml()
+
+    save_path_file = "logsfile.xml"
+
+    f = open(save_path_file, 'a+')
+
+    f.write(xml_str + '\t')
+
     sSocket = socket(AF_INET, SOCK_STREAM)
     #print('this is the audit server')
 
@@ -18,33 +26,26 @@ def main(root):
         while True:
             # transactions = ""
             transactions = connection.recv(1024).decode()
+            #print(transactions)
             #stripped_line = [s.rstrip() for s in line]
             sb = transactions.split(',')
             transactionsList = [s.strip() for s in sb]
-            #print(transactionsList, "calling detTage")
 
             #tolog(tag, transactions[1])
-
             if transactions:
-                detTag(transactionsList)
+                print(transactions)
+                print(transactionsList, "calling detTage")
+                node = detTag(transactionsList)
+                xml_str = node.toprettyxml(indent='\t\t', newl='\n\t')
+                f.write(xml_str)
+
                 connection.send(('next').encode())
-                if transactionsList[1] == "DUMPLOG":
-                    connection.send(('finish').encode())
-                    break
-            else: ##empty / no transactions received
-                break
-
-        #print("Yhea man")
-        xml_str = root.toprettyxml(indent='\t\t')
-
-        save_path_file = "logsfile.xml"
-
-        with open(save_path_file, "w+") as f:
-            f.write(xml_str)
 
     except IOError:
+        print('error 11')
         connection.send("error")
         connection.close()
+    print('error 22')
     connection.close()
     sSocket.close()
 
@@ -60,6 +61,7 @@ def userCommandChildren_1(data):
     usernameChild(userCommandChild, data[2])
     fundsChild(userCommandChild, data[3])
     #print "everything went through"
+    return userCommandChild
 
 #trans,command,userid,stockname,server,types:userCommand-quote(2)
 def userCommandChildren_2(data):
@@ -72,6 +74,7 @@ def userCommandChildren_2(data):
     commandChild(userCommandChild, data[1])
     usernameChild(userCommandChild, data[2])
     stockSymbolChild(userCommandChild, data[3])
+    return userCommandChild
 
 #trans,command,username,stockname,funds,server,types:userCommand-buy(3)
 def userCommandChildren_3(data):
@@ -85,6 +88,7 @@ def userCommandChildren_3(data):
     usernameChild(userCommandChild, data[2])
     stockSymbolChild(userCommandChild, data[3])
     fundsChild(userCommandChild, data[4])
+    return userCommandChild
 
 #trans,command,username,server,types:userCommand-commitBuy(4)
 def userCommandChildren_4(data):
@@ -96,6 +100,7 @@ def userCommandChildren_4(data):
     transactionNumChild(userCommandChild, data[0])
     commandChild(userCommandChild, data[1])
     usernameChild(userCommandChild, data[2])
+    return userCommandChild
 
 #trans,command,username,stockname,server,types:userCommand-cancelSetBuy(5)
 def userCommandChildren_5(data):
@@ -108,6 +113,7 @@ def userCommandChildren_5(data):
     commandChild(userCommandChild, data[1])
     usernameChild(userCommandChild, data[2])
     stockSymbolChild(userCommandChild, data[3])
+    return userCommandChild
 
 #trans,command,username,stockname,stockprice,server,types:userCommand-setBuyTrigger(6)
 def userCommandChildren_6(data):
@@ -121,6 +127,7 @@ def userCommandChildren_6(data):
     usernameChild(userCommandChild, data[2])
     stockSymbolChild(userCommandChild, data[3])
     fundsChild(userCommandChild, data[4])
+    return userCommandChild
 
 #trans,command,username,filename,server,types:userCommand-dumplog1(7)
 def userCommandChildren_7(data):
@@ -133,6 +140,7 @@ def userCommandChildren_7(data):
     commandChild(userCommandChild, data[1])
     usernameChild(userCommandChild, data[2])
     filenameChild(userCommandChild,data[3])
+    return userCommandChild
 
 #trans,command,filename,server,types:userCommand-dumplog2(8)
 def userCommandChildren_8(data):
@@ -144,7 +152,7 @@ def userCommandChildren_8(data):
     transactionNumChild(userCommandChild, data[0])
     commandChild(userCommandChild, data[1])
     filenameChild(userCommandChild, data[2])
-
+    return userCommandChild
 
 #trans,command,userid,stockname,stockprice,timestamp,cryptokey,server,types:quoteServer(9)
 def quoteServerChildren_9(data):
@@ -159,7 +167,7 @@ def quoteServerChildren_9(data):
     stockSymbolChild(quoteServerChild, data[3])
     priceChild(quoteServerChild, data[4])
     cryptokeyChild(quoteServerChild, data[6])
-
+    return quoteServerChild
 
 #trans,command,username,stockname,funds,server,types:systemEvent-database(10)
 def systemEventChildren_10(data):
@@ -173,6 +181,7 @@ def systemEventChildren_10(data):
     usernameChild(systemEventChild, data[2])
     stockSymbolChild(systemEventChild, data[3])
     fundsChild(systemEventChild, data[4])
+    return systemEventChild
 
 #trans,action,username,funds,server,types:accountTransaction-add(11)
 def accountTransactionChildren_11(data):
@@ -186,6 +195,7 @@ def accountTransactionChildren_11(data):
     usernameChild(accountTransactionChild, data[2])
     fundsChild(accountTransactionChild, data[3])
     #print "everything went through"
+    return accountTransactionChild
 
 #trans,command,username,stockname,server,types:systemEvent-cancelSetBuy(12)
 def systemEventChildren_12(data):
@@ -198,6 +208,7 @@ def systemEventChildren_12(data):
     commandChild(systemEventChild, data[1])
     usernameChild(systemEventChild, data[2])
     stockSymbolChild(systemEventChild, data[3])
+    return systemEventChild
 
 #trans,command,username,stockname,stockprice,server,types:systemEvent-setBuyTrigger(13)
 def systemEventChildren_13(data):
@@ -211,6 +222,7 @@ def systemEventChildren_13(data):
     usernameChild(systemEventChild, data[2])
     stockSymbolChild(systemEventChild, data[3])
     fundsChild(systemEventChild, data[4])
+    return systemEventChild
 
 def errorEventChildren(data):
 
@@ -225,6 +237,7 @@ def errorEventChildren(data):
     stockSymbolChild(errorEventChild, data)
     fundsChild(errorEventChild, data)
     errorMessageChild(errorEventChild, data)
+    return errorEventChild
 
 
 def timestampChild(parent, data):
@@ -297,43 +310,43 @@ def detTag(data): #determine the tag of the input
     tag = ''
     if data[-1] == "one":
         #types:userCommand-add(1)
-        userCommandChildren_1(data)
+        return userCommandChildren_1(data)
     elif data[-1] == "two":
         #types:userCommand-quote(2)
-        userCommandChildren_2(data)
+        return userCommandChildren_2(data)
     elif data[-1] == "three":
         #types:userCommand-buy(3)-sell(3)-setBuyAmount(3)-setSellAmount(3)
-        userCommandChildren_3(data)
+        return userCommandChildren_3(data)
     elif data[-1] == "four":
         #types:userCommand-commitBuy(4)-commitSell(4)-cancelBuy(4)-cancelSell(4)
-        userCommandChildren_4(data)
+        return userCommandChildren_4(data)
     elif data[-1] == "five":
         #types:userCommand-cancelSetBuy(5)-cancelSetSell(5)
-        userCommandChildren_5(data)
+        return userCommandChildren_5(data)
     elif data[-1] == "six":
         #types:userCommand-setBuyTrigger(6)-setSellTrigger(6)
-        userCommandChildren_6(data)
+        return userCommandChildren_6(data)
     elif data[-1] == "seven":
         #types:userCommand-dumplog1(7)
-        userCommandChildren_7(data)
+        return userCommandChildren_7(data)
     elif data[-1] == "eight":
         #types:userCommand-dumplog2(8)
-        userCommandChildren_8(data)
+        return userCommandChildren_8(data)
     elif data[-1] == "nine":
         #types:quoteServer(9)
-        quoteServerChildren_9(data)
+        return quoteServerChildren_9(data)
     elif data[-1] == "ten":
         #types:systemEvent-database(10)-setBuyAmount(10)-setSellAmount(10)
-        systemEventChildren_10(data)
+        return systemEventChildren_10(data)
     elif data[-1] == "eleven":
         #types:accountTransaction-add(11)-remove(11)
-        accountTransactionChildren_11(data)
+        return accountTransactionChildren_11(data)
     elif data[-1] == "twelve":
         #types:systemEvent-cancelSetBuy(12)-cancelSetSell(12)
-        systemEventChildren_12(data)
+        return systemEventChildren_12(data)
     elif data[-1] == "thirteen":
         #types:systemEvent-setBuyTrigger(13)-setSellTrigger(13)
-        systemEventChildren_13(data)
+        return systemEventChildren_13(data)
     else:
         tag = "errorEvent"
 

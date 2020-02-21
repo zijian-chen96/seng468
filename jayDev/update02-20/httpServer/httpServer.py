@@ -27,7 +27,7 @@ s33 = "192.168.0.33"
 
 
 def readFile():
-    alist = [line.rstrip().split(' ')[1] for line in open(filename3)]
+    alist = [line.rstrip().split(' ')[1] for line in open(filename)]
     sendToTrans(alist)
 
 def sendToTrans(alist):
