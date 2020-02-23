@@ -1,0 +1,146 @@
+version: "3"
+
+services:
+  db:
+    build: db/
+    command: python ./DBGood.py
+    network_mode: host
+
+  auditserver:
+    build: auditServer/
+    command: python ./auditServer.py
+    network_mode: host
+    ports:
+      - 51000:51000
+    depends_on:
+      - db
+
+  transserver00:
+    build: transServer00/
+    command: python ./transationServer00.py
+    network_mode: host
+    ports:
+      - 50000:50000
+    depends_on:
+      - db
+      - auditserver
+
+  transserver01:
+    build: transServer01/
+    command: python ./transationServer01.py
+    network_mode: host
+    ports:
+      - 50001:50001
+    depends_on:
+      - db
+      - auditserver
+
+  # transserver02:
+  #   build: transServer02/
+  #   command: python ./transationServer02.py
+  #   network_mode: host
+  #   ports:
+  #     - 50002:50002
+  #   depends_on:
+  #     - db
+  #     - auditserver
+  #
+  # transserver03:
+  #   build: transServer03/
+  #   command: python ./transationServer03.py
+  #   network_mode: host
+  #   ports:
+  #     - 50003:50003
+  #   depends_on:
+  #     - db
+  #     - auditserver
+  #
+  # transserver04:
+  #   build: transServer04/
+  #   command: python ./transationServer04.py
+  #   network_mode: host
+  #   ports:
+  #     - 50004:50004
+  #   depends_on:
+  #     - db
+  #     - auditserver
+  #
+  # transserver05:
+  #   build: transServer05/
+  #   command: python ./transationServer05.py
+  #   network_mode: host
+  #   ports:
+  #     - 50005:50005
+  #   depends_on:
+  #     - db
+  #     - auditserver
+
+  httpserver:
+    build: httpServer/
+    command: python -u ./httpServer.py
+    network_mode: host
+    depends_on:
+      - db
+      - auditserver
+      - transserver00
+      - transserver01
+      # - transserver02
+      # - transserver03
+      # - transserver04
+      # - transserver05
+
+  # httpserver01:
+  #   build: httpServer01/
+  #   command: python -u ./httpServer01.py
+  #   network_mode: host
+  #   depends_on:
+  #     - db
+  #     - auditserver
+  #     - transserver00
+  #     - transserver01
+  #     - transserver02
+  #     - transserver03
+  #     - transserver04
+  #     - transserver05
+
+  # httpserver02:
+  #   build: httpServer02/
+  #   command: python -u ./httpServer02.py
+  #   network_mode: host
+  #   depends_on:
+  #     - db
+  #     - auditserver
+  #     - transserver00
+  #     - transserver01
+  #     - transserver02
+  #     - transserver03
+  #     - transserver04
+  #     - transserver05
+  #
+  # httpserver03:
+  #   build: httpServer03/
+  #   command: python -u ./httpServer03.py
+  #   network_mode: host
+  #   depends_on:
+  #     - db
+  #     - auditserver
+  #     - transserver00
+  #     - transserver01
+  #     - transserver02
+  #     - transserver03
+  #     - transserver04
+  #     - transserver05
+  #
+  # httpserver04:
+  #   build: httpServer04/
+  #   command: python -u ./httpServer04.py
+  #   network_mode: host
+  #   depends_on:
+  #     - db
+  #     - auditserver
+  #     - transserver00
+  #     - transserver01
+  #     - transserver02
+  #     - transserver03
+  #     - transserver04
+  #     - transserver05

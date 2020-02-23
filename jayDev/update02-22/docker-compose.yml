@@ -1,0 +1,104 @@
+version: "3"
+
+services:
+  db:
+    build: db/
+    command: python ./DBGood.py
+    network_mode: host
+
+  auditserver:
+    build: auditServer/
+    command: python ./auditServer.py
+    network_mode: host
+    ports:
+      - 51000:51000
+    depends_on:
+      - db
+
+  transserver01:
+    build: transServer01/
+    command: python ./transationServer01.py
+    network_mode: host
+    ports:
+      - 50001:50001
+    depends_on:
+      - db
+      - auditserver
+
+  transserver02:
+    build: transServer02/
+    command: python ./transationServer02.py
+    network_mode: host
+    ports:
+      - 50002:50002
+    depends_on:
+      - db
+      - auditserver
+
+  transserver03:
+    build: transServer03/
+    command: python ./transationServer03.py
+    network_mode: host
+    ports:
+      - 50003:50003
+    depends_on:
+      - db
+      - auditserver
+
+  transserver04:
+    build: transServer04/
+    command: python ./transationServer04.py
+    network_mode: host
+    ports:
+      - 50004:50004
+    depends_on:
+      - db
+      - auditserver
+
+  httpserver01:
+    build: httpServer01/
+    command: python ./httpServer01.py
+    network_mode: host
+    depends_on:
+      - db
+      - auditserver
+      - transserver01
+      - transserver02
+      - transserver03
+      - transserver04
+
+  httpserver02:
+    build: httpServer02/
+    command: python ./httpServer02.py
+    network_mode: host
+    depends_on:
+      - db
+      - auditserver
+      - transserver01
+      - transserver02
+      - transserver03
+      - transserver04
+
+  httpserver03:
+    build: httpServer03/
+    command: python ./httpServer03.py
+    network_mode: host
+    depends_on:
+      - db
+      - auditserver
+      - transserver01
+      - transserver02
+      - transserver03
+      - transserver04
+
+  httpserver04:
+    build: httpServer04/
+    command: python ./httpServer04.py
+    network_mode: host
+    depends_on:
+      - db
+      - auditserver
+      - transserver01
+      - transserver02
+      - transserver03
+      - transserver04
