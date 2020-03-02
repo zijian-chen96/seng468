@@ -62,15 +62,18 @@ class TRIGGERS(threading.Thread):
         )
         mycursor = mydb2.cursor()
 
+        redClient2 = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
         command = ''
         if self.dataList2[1] == 'SET_BUY_AMOUNT':
             command = 'SET_BUY_TRIGGER'
         else:
             command = 'SET_SELL_TRIGGER'
 
-        while command == 'SET_BUY_TRIGGER':
-            if checkIsTrigger(mycursor, mydb2, self.dataList2[2], self.dataList2[3], command) == 1:
-                buyStockPrice = getTriggerStockPrice(mycursor, mydb2, self.dataList2[2], self.dataList2[3], command)
+        if command == 'SET_BUY_TRIGGER':
+            btriDataFromRedis = redClient2.get('Btri_'+self.dataList2[2]+'_'+self.dataList2[3])
+
+            if btriDataFromRedis != None:
 
                 holdMoney = Decimal(self.dataList2[4])
                 if holdMoneyFromAcount(mycursor, mydb2, self.dataList2[2], self.dataList2[4]) == 1:
@@ -85,7 +88,7 @@ class TRIGGERS(threading.Thread):
 
                         dataFromQuote = sendToQuote(self.dataList2[3] + ',' + self.dataList2[2] + '\r').split(',')
 
-                        if Decimal(dataFromQuote[0]) <= buyStockPrice and Decimal(dataFromQuote[0]) <= holdMoney:
+                        if Decimal(dataFromQuote[0]) <= Decimal(btriDataFromRedis) and Decimal(dataFromQuote[0]) <= holdMoney:
 
                             userFundsLeft = (holdMoney % Decimal(dataFromQuote[0])) + currFunds
                             stockAmount = int(holdMoney / Decimal(dataFromQuote[0]))
@@ -95,7 +98,6 @@ class TRIGGERS(threading.Thread):
                             dbLogs(mycursor, mydb2, (self.dataList2[2], self.dataList2[0], 'BUY', self.dataList2[3], dataFromQuote[0], self.dataList2[4], currFunds, getCurrTimestamp(), dataFromQuote[4]))
                             updateFunds(mycursor, mydb2, self.dataList2[2],userFundsLeft)
 
-                            #deleteTriggerFromDB(mycursor, mydb, self.dataList2[2],self.dataList2[3],command)
                             break
 
                         else:
@@ -103,23 +105,14 @@ class TRIGGERS(threading.Thread):
                             time.sleep(10)
                     #print('finish exit out of thread!')
 
-                    break
+        else:
+            striDataFromRedis = redClient2.get('Stri_'+self.dataList2[2]+'_'+self.dataList2[3])
 
-                else:
-                    #print("User funds is not enough!")
-                    break
+            if striDataFromRedis != None:
+                numStocks = getStockAmount(mycursor, mydb2, self.dataList2[2], self.dataList2[3])
+                holdStockAmount = int(Decimal(self.dataList2[4]) / Decimal(striDataFromRedis))
 
-            else:
-                #print('TRIGGER NOT FOUND!')
-                break
-
-        while command == 'SET_SELL_TRIGGER':
-            if checkIsTrigger(mycursor, mydb2, self.dataList2[2], self.dataList2[3], command) == 1:
-                sellStockPrice = getTriggerStockPrice(mycursor, mydb2, self.dataList2[2],self.dataList2[3],command)
-                numStocks = checkStockAmount(mycursor, mydb2, self.dataList2[2], self.dataList2[3])
-                holdStockAmount = int(Decimal(self.dataList2[4])/sellStockPrice)
                 if numStocks != 0 and holdStockAmountFromAcount(mycursor, mydb2, self.dataList2[2], self.dataList2[3], holdStockAmount) == 1:
-
                     currFunds = Decimal(getkAcountFunds(mycursor, mydb2, self.dataList2[2]))
 
                     dbLogs(mycursor, mydb2, (self.dataList2[2], self.dataList2[0], 'SELL-TRIGGER-HOLDER', self.dataList2[3], None, holdStockAmount, currFunds, getCurrTimestamp(), None))
@@ -131,17 +124,16 @@ class TRIGGERS(threading.Thread):
                         dataFromQuote = sendToQuote(self.dataList2[3] + ',' + self.dataList2[2] + '\r').split(',')
                         numStocksToSell = int(Decimal(self.dataList2[4]) / Decimal(dataFromQuote[0]))
 
-                        if Decimal(dataFromQuote[0]) >= sellStockPrice and holdStockAmount >= numStocksToSell:
-
+                        if Decimal(dataFromQuote[0]) >= Decimal(striDataFromRedis) and holdStockAmount >= numStocksToSell:
 
                             moneyCanGet = numStocksToSell * Decimal(dataFromQuote[0])
                             newFunds = currFunds + moneyCanGet
+
                             #dblock.acquire()
-                            updateStockAmount(mycursor, mydb2, self.dataList2[2], self.dataList2[3], (numStocks-numStocksToSell))
+                            updateStockAmount(mycursor, mydb2, self.dataList2[2], self.dataList2[3], (numStocks - numStocksToSell))
+                            # username, transnumber, command, stockname, stockprice, amount, funds, times, cryptokey
                             dbLogs(mycursor, mydb2, (self.dataList2[2], self.dataList2[0], 'SELL', self.dataList2[3], dataFromQuote[0], self.dataList2[4], currFunds, getCurrTimestamp(), dataFromQuote[4]))
                             updateFunds(mycursor, mydb2, self.dataList2[2], newFunds)
-
-                            #deleteTriggerFromDB(mycursor, mydb, self.dataList2[2],self.dataList2[3],command)
 
                             break
 
@@ -149,15 +141,6 @@ class TRIGGERS(threading.Thread):
                             #print("current stock price: " + dataFromQuote[0])
                             time.sleep(10)
                     #print('finish exit out of thread!')
-
-                    break
-
-                else:
-                    #print("User stock amount is not enough!")
-                    break
-            else:
-                #print('TRIGGER NOT FOUND!')
-                break
 
 
 def getCurrTimestamp():
@@ -179,8 +162,8 @@ def sendToQuote(data):
     fromUser = data
     quoteServerSocket = socket(AF_INET,SOCK_STREAM)
 
-    #quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
-    quoteServerSocket.connect(('192.168.0.10',44433))
+    quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
+    #quoteServerSocket.connect(('192.168.0.10',44433))
 
     quoteServerSocket.send(fromUser.encode())
 
@@ -218,12 +201,12 @@ def getkAcountFunds(mycursor, mydb, username): # check the acount funds
     return mycursor.fetchall()[0][0]
 
 
-def checkStockAmount(mycursor, mydb, username, stockname): # check the stock amount the user owned
-    if checkUserOwnStock(mycursor, mydb, username, stockname) == 1:
+def getStockAmount(mycursor, mydb, username, stockname): # check the stock amount the user owned
+    try:
         check = "SELECT amount FROM stocks WHERE username = %s and stockname = %s"
         mycursor.execute(check, (username, stockname,))
         return mycursor.fetchall()[0][0]
-    else:
+    except:
         return 0
 
 
@@ -270,40 +253,9 @@ def checkLogTimestamp(mycursor, mydb, username, command, stockname):
         return 0
 
 
-def getbsLogTimestamp(mycursor, mydb, username, command):
-    check = "SELECT times FROM bslogs WHERE username = %s AND command = %s ORDER BY transnumber DESC LIMIT 1"
-    mycursor.execute(check,(username, command,))
-    result = mycursor.fetchall()[0][0]
-    return result
-
-
-def getBuyAmount(mycursor, mydb, username):
-    check = "SELECT stockname,amount FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
-    mycursor.execute(check,(username,))
-    result = mycursor.fetchall()[0]
-    return result
-
-
-def getBuySellData(mycursor, mydb, username, command):
-    check = "SELECT stockname,amount FROM bslogs WHERE username = %s AND command = %s ORDER BY transnumber DESC LIMIT 1"
-    mycursor.execute(check,(username, command,))
-    result = mycursor.fetchall()[0]
-    return result
-
-
 def checkCommandInLog(mycursor, mydb, username, stockname, command):
     check = "SELECT count(username) FROM logs WHERE username = %s AND stockname = %s AND command = %s"
     mycursor.execute(check, (username, stockname, command,))
-    result = mycursor.fetchall()[0][0]
-    if result > 0:
-        return 1
-    else:
-        return 0
-
-
-def checkCommandInbsLog(mycursor, mydb, username, command):
-    check = "SELECT count(username) FROM bslogs WHERE username = %s AND command = %s"
-    mycursor.execute(check, (username, command,))
     result = mycursor.fetchall()[0][0]
     if result > 0:
         return 1
@@ -331,22 +283,6 @@ def checkCrypto(mycursor, mydb, username, stockname, command):
         return 0
 
 
-def checkIsTrigger(mycursor, mydb, username, stockname, command):
-    check = "SELECT count(command) FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
-    mycursor.execute(check, (username, stockname, command,))
-    result = mycursor.fetchall()[0][0]
-    if result > 0:
-        return 1
-    else:
-        return 0
-
-
-def updateTrigger(mycursor, mydb, username, stockname, command, stockprice):
-    updateFormula = "UPDATE triggers SET stockprice = %s WHERE username = %s and stockname = %s and command = %s"
-    mycursor.execute(updateFormula, (stockprice, username, stockname, command,))
-    mydb.commit()
-
-
 def getQuoteFromLogs(mycursor, mydb, username, stockname, command):
     if checkCommandInLog(mycursor, mydb, username, stockname, "QUOTE") == 1:
         #quote,sym,userid,timestamp,cryptokey
@@ -356,12 +292,6 @@ def getQuoteFromLogs(mycursor, mydb, username, stockname, command):
         return result
     else:
         return 0
-
-
-def getTriggerStockPrice(mycursor, mydb, username, stockname, command):
-    check = "SELECT stockprice FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
-    mycursor.execute(check, (username, stockname, command,))
-    return mycursor.fetchall()[0][0]
 
 
 def getLogUser(mycursor, mydb, username): # get one user's transation log
@@ -400,23 +330,11 @@ def getAccountSummary(mycursor, mydb, username):
     return s
 
 
-def getTriggerSummary(mycursor, mydb, username):
-    getTrigger = "SELECT * FROM triggers WHERE username = %s"
-    mycursor.execute(getTrigger,(username,))
-    result = mycursor.fetchall()
-    s = ''
-    for i in result:
-        for j in i:
-            s += str(j)+' '
-        s += '\n'
-    return s
-
-
 def getSummary(mycursor, mydb, username):
     transSummary = getLogUser(mycursor, mydb, username)
     accountSummary = getAccountSummary(mycursor, mydb, username)
-    triggerSummary = getTriggerSummary(mycursor, mydb, username)
-    return ('Acount: '+accountSummary+'Trigger_Set: '+triggerSummary+'Transations: '+transSummary)
+    # triggerSummary = getTriggerSummary(mycursor, mydb, username)
+    return ('Acount: '+accountSummary+'Transations: '+transSummary)
 
 
 def holdMoneyFromAcount(mycursor, mydb, username, amount):
@@ -432,7 +350,7 @@ def holdMoneyFromAcount(mycursor, mydb, username, amount):
 
 
 def holdStockAmountFromAcount(mycursor, mydb, username, stockname, amount):
-    getAmount =  checkStockAmount(mycursor, mydb, username, stockname)
+    getAmount =  getStockAmount(mycursor, mydb, username, stockname)
     newAmount = getAmount - Decimal(amount)
     if getAmount >= Decimal(amount):
         holdStockAmountFormula = "UPDATE stocks SET amount = %s WHERE username = %s"
@@ -471,25 +389,9 @@ def addToStocksDB(mycursor, mydb, user):
         mycursor.execute(addFormula, user)
         mydb.commit()
     else:
-        oldShare = checkStockAmount(mycursor, mydb, user[0], user[1])
+        oldShare = getStockAmount(mycursor, mydb, user[0], user[1])
         newShare = user[2] + oldShare
         updateStockAmount(mycursor, mydb, user[0], user[1], newShare)
-
-
-def addToTriggerDB(mycursor, mydb, user):
-    addFormula = "INSERT INTO triggers (username, stockname, command, stockprice, times) VALUES (%s,%s,%s,%s,%s)"
-    mycursor.execute(addFormula, user)
-    mydb.commit()
-
-
-def deleteTriggerFromDB(mycursor, mydb, username, stockname, command):
-    if checkIsTrigger(mycursor, mydb, username, stockname, command) == 1:
-        deleteFormula = "DELETE FROM triggers WHERE username = %s AND stockname = %s AND command = %s"
-        mycursor.execute(deleteFormula, (username,stockname,command,))
-        mydb.commit()
-        return 1
-    else:
-        return 0
 
 
 def removeFromDB(mycursor, mydb, user): # remove the user funds from DB
@@ -506,33 +408,6 @@ def dbLogs(mycursor, mydb, logInfo):
     logFormula = "INSERT INTO logs (username, transnumber, command, stockname, stockprice, amount, funds, times, cryptokey) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)"
     mycursor.execute(logFormula, logInfo)
     mydb.commit()
-
-
-def dbBuySellLogs(mycursor, mydb, logInfo):
-    logFormula = "INSERT INTO bslogs (username, transnumber, command, stockname, amount, times) VALUES (%s,%s,%s,%s,%s,%s)"
-    mycursor.execute(logFormula, logInfo)
-    mydb.commit()
-
-
-def deleteBuySellLogs(mycursor, mydb, username, command):
-    if checkCommandInbsLog(mycursor, mydb, username, command) == 1:
-        checkBSLogs = "SELECT * FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
-        mycursor.execute(checkBSLogs, (username,))
-        result = mycursor.fetchall()[0]
-
-        #calculate the currFunds
-        accountFunds = getkAcountFunds(mycursor, mydb, username)
-        stockprice = checkStockUser(mycursor, mydb, username, command)
-        #add to dbLogs
-        dbLogs(mycursor, mydb, (result[0], result[1], result[2], result[3], stockprice, result[4], accountFunds, getCurrTimestamp(), None))
-
-        #remove from bslogs
-        deleteFormula = "DELETE FROM bslogs WHERE username = %s ORDER BY transnumber DESC LIMIT 1"
-        mycursor.execute(deleteFormula, (username,))
-        mydb.commit()
-        return 1
-    else:
-        return 0
 
 
 def red_Quete_HSET(redClient, key, stockprice, qouteTimestamp, cryptokey):
@@ -664,11 +539,11 @@ def commandControl(data, cSocket, redClient):
 
                 #trans,command,username,funds,server,types:accountTransaction-remove(11)
                 #dataToAudit = ",".join([dataList[0],'remove',dataList[2],str(snspba[2]),"CLT2","eleven"])
-                dataToAudit = {'trans': dataList[0], 'action': 'remove', 'username': dataList[2], 'funds': str(buyDataFromRedis[2]), 'server': "CLT2", 'types': 'eleven'}
+                dataToAudit = {'trans': dataList[0], 'action': 'remove', 'username': dataList[2], 'funds': buyDataFromRedis[2], 'server': "CLT2", 'types': 'eleven'}
                 logQueue.put(dataToAudit)
 
                 #username,stockname,stockprice,amount,funds
-                result = dataList[2]+','+stockname+','+str(quoteDataFromRedis[0])+','+str(buyDataFromRedis[2])+','+str(userFundsLeft)
+                result = dataList[2]+','+stockname+','+quoteDataFromRedis[0]+','+buyDataFromRedis[2]+','+str(userFundsLeft)
 
                 return result
 
@@ -681,7 +556,7 @@ def commandControl(data, cSocket, redClient):
 
             currFunds =  Decimal(getkAcountFunds(mycursor, mydb, dataList[2]))
 
-            if currFunds >= Decimal(buyDataFromRedis[2]) and dataFromQuote[0] <= Decimal(buyDataFromRedis[2]):
+            if currFunds >= Decimal(buyDataFromRedis[2]) and Decimal(dataFromQuote[0]) <= Decimal(buyDataFromRedis[2]):
                 userFundsLeft = (Decimal(buyDataFromRedis[2]) % Decimal(dataFromQuote[0])) + (currFunds - Decimal(buyDataFromRedis[2]))
                 stockAmount = int(Decimal(buyDataFromRedis[2]) / Decimal(dataFromQuote[0]))
 
@@ -702,7 +577,6 @@ def commandControl(data, cSocket, redClient):
             return "User Funds Not Enough!"
 
     elif dataList[1] == "CANCEL_BUY":
-        #result = deleteBuySellLogs(mycursor, mydb, dataList[2],'BUY')
         stockname = redClient.rpop('B_'+dataList[2])
         buyDataFromRedis = redClient.hvals('B_'+dataList[2]+'_'+str(stockname)) #data --trans, command, moneyAmount
 
@@ -728,25 +602,21 @@ def commandControl(data, cSocket, redClient):
         dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'funds': dataList[4], 'server': "CLT2", 'types': 'three'}
         logQueue.put(dataToAudit)
 
-        if checkUserOwnStock(mycursor, mydb, dataList[2], dataList[3]) == 0:
-            return "User does not own the stocks!"
+        stockAmount = getStockAmount(mycursor, mydb, dataList[2], dataList[3])
 
-        amount = checkStockAmount(mycursor, mydb, dataList[2], dataList[3])
+        if stockAmount > 0:
+            quoteDataFromRedis = redClient.hvals('Q_'+dataList[2]+'_'+dataList[3]) #data --stockprice, quoteServerTime, crypto
 
-        if amount > 0:
-            commandTimestamp = getCurrTimestamp()
-            logTimestamp = checkLogTimestamp(mycursor, mydb, dataList[2],'QUOTE',dataList[3])
-            if logTimestamp != 0 and checkCommandInLog(mycursor, mydb, dataList[2], dataList[3], "QUOTE") == 1 and in60s(logTimestamp, commandTimestamp) == 1:
-                stockprice = checkStockUser(mycursor, mydb, dataList[2], dataList[3])
+            if quoteDataFromRedis != []:
+                ownStockAmount = Decimal(quoteDataFromRedis[0]) * Decimal(stockAmount)
 
-                ownMoney = stockprice * Decimal(amount)
-
-                if ownMoney < Decimal(dataList[4]):
+                if ownStockAmount < Decimal(dataList[4]):
                     return "User money is not enough!"
 
-                crypto = checkCrypto(mycursor, mydb, dataList[2], dataList[3], 'QUOTE')
-
-                dbBuySellLogs(mycursor, mydb, (dataList[2], dataList[0], dataList[1], dataList[3], dataList[4], getCurrTimestamp()))
+                #record in the redis cache --trans, command, funds
+                red_BSLog_HSET(redClient, ('S_'+dataList[2]+'_'+dataList[3]), dataList[0], dataList[1], dataList[4])
+                #record the most recently SELL command
+                redClient.rpush(('S_'+dataList[2]), dataList[3])
 
                 #trans,command,username,stockname,funds,server,types:systemEvent-database(10)
                 #dataToAudit = ",".join([data,"HSD2","ten"])
@@ -754,19 +624,22 @@ def commandControl(data, cSocket, redClient):
                 logQueue.put(dataToAudit)
 
                 #userid,stockname,amount,stockprice,qouteTimestamp,cryptokey
-                result = str(dataList[1])+','+str(dataList[2])+','+str(dataList[4])+','+str(stockprice)+','+str(logTimestamp)+','+crypto
+                result = str(dataList[1])+','+str(dataList[2])+','+str(dataList[4])+','+str(quoteDataFromRedis[0])+','+str(quoteDataFromRedis[1])+','+quoteDataFromRedis[2]
 
                 return result
 
             else:
                 newdata = dataList[3] + ',' + dataList[2] + '\r'
                 dataFromQuote = sendToQuote(newdata).split(',')
-                ownMoney = Decimal(dataFromQuote[0]) * Decimal(amount)
+                ownStockAmount = Decimal(dataFromQuote[0]) * Decimal(stockAmount)
 
-                if ownMoney < Decimal(dataList[4]):
+                if ownStockAmount < Decimal(dataList[4]):
                     return "User money is not enough!"
 
-                dbBuySellLogs(mycursor, mydb, (dataList[2], dataList[0], dataList[1], dataList[3], dataList[4], getCurrTimestamp()))
+                #record in the redis cache --trans, command, funds
+                red_BSLog_HSET(redClient, ('S_'+dataList[2]+'_'+dataList[3]), dataList[0], dataList[1], dataList[4])
+                #record the most recently SELL command
+                redClient.rpush(('S_'+dataList[2]), dataList[3])
 
                 #trans,command,username,stockname,funds,server,types:systemEvent-database(10)
                 #dataToAudit = ",".join([data,"HSD2","ten"])
@@ -782,65 +655,87 @@ def commandControl(data, cSocket, redClient):
             return "User dose not own the stocks!"
 
     elif dataList[1] == "COMMIT_SELL":
-        #check to see if user has asked for quote within last 60 seconds
-
         #trans,command,username,server,types:userCommand-commitBuy(4)
         #dataToAudit = ",".join([data,"CLT2","four"])
         dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'server': "CLT2", 'types': 'four'}
         logQueue.put(dataToAudit)
 
-        check_SELL_in_bsLog = checkCommandInbsLog(mycursor, mydb, dataList[2], 'SELL')
+        #return the stockname
+        stockname = redClient.rpop('S_'+dataList[2])
+        sellDataFromRedis = redClient.hvals('S_'+dataList[2]+'_'+str(stockname)) #data --trans, command, moneyAmount
+        quoteDataFromRedis = redClient.hvals('Q_'+dataList[2]+'_'+str(stockname)) #data --stockprice, quoteServerTime, crypto
+        # print(stockname)
+        # print(sellDataFromRedis)
+        # print(quoteDataFromRedis)
 
-        if check_SELL_in_bsLog == 0:
-            return "There is no sell command input!"
+        stockAmount = getStockAmount(mycursor, mydb, dataList[2], stockname)
 
-        stockname = getBuySellData(mycursor, mydb, dataList[2], 'SELL')[0]
-        amount = checkStockAmount(mycursor, mydb, dataList[2], stockname)
+        if sellDataFromRedis == [] or stockname == None:
+            return "ERROR BUY COMMAND NOT FIND!"
 
-        if checkCommandInbsLog(mycursor, mydb, dataList[2], 'SELL') == 1 and amount > 0:
+        if quoteDataFromRedis != []:
+            currFunds =  Decimal(getkAcountFunds(mycursor, mydb, dataList[2]))
+            ownStockAmount = Decimal(quoteDataFromRedis[0]) * Decimal(stockAmount)
 
-            commitTime = getCurrTimestamp()
-            logTimestamp = getbsLogTimestamp(mycursor, mydb, dataList[2],'SELL')
+            if ownStockAmount >= Decimal(sellDataFromRedis[2]):
 
-            if checkIsQuoteStock(mycursor, mydb, dataList[2], stockname, "QUOTE") == 1 and in60s(logTimestamp, commitTime) == 1:
+                amountCanSell = int(Decimal(sellDataFromRedis[2]) / Decimal(quoteDataFromRedis[0]))
+                moneyCanGet = amountCanSell * Decimal(quoteDataFromRedis[0])
+                newFunds = currFunds + moneyCanGet
+                shareLeft = stockAmount - amountCanSell
 
-                currFunds =  Decimal(getkAcountFunds(mycursor, mydb, dataList[2]))
-                snspfd = getBuySellData(mycursor, mydb, dataList[2], 'SELL')
+                updateStockAmount(mycursor, mydb, dataList[2], stockname, shareLeft)
+                dbLogs(mycursor, mydb, (dataList[2], sellDataFromRedis[0], dataList[1], stockname, quoteDataFromRedis[0], sellDataFromRedis[2], currFunds, getCurrTimestamp(), None))
+                updateFunds(mycursor, mydb, dataList[2], newFunds)
 
-                total = amount * snspfd[1]
-                if total >= snspfd[2]:
+                #trans,command,username,funds,server,types:accountTransaction-add(11)
+                #dataToAudit = ",".join([dataList[0],'add',dataList[2],str(snspfd[2]),"CLT2","eleven"])
+                dataToAudit = {'trans': dataList[0], 'action': 'add', 'username': dataList[2], 'funds': sellDataFromRedis[2], 'server': "CLT2", 'types': 'eleven'}
+                logQueue.put(dataToAudit)
 
-                    amountCanSell = int(snspfd[2]/snspfd[1])
-                    moneyCanGet = amountCanSell * snspfd[1]
-                    newFunds = currFunds + moneyCanGet
-                    shareLeft = amount - amountCanSell
+                result = dataList[2]+','+stockname+','+quoteDataFromRedis[0]+','+sellDataFromRedis[2]+','+str(newFunds)
 
-                    updateStockAmount(mycursor, mydb, dataList[2], snspfd[0], shareLeft)
-                    deleteBuySellLogs(mycursor, mydb, dataList[2],'SELL')
-                    updateFunds(mycursor, mydb, dataList[2], newFunds)
-
-                    #trans,command,username,funds,server,types:accountTransaction-add(11)
-                    #dataToAudit = ",".join([dataList[0],'add',dataList[2],str(snspfd[2]),"CLT2","eleven"])
-                    dataToAudit = {'trans': dataList[0], 'action': 'add', 'username': dataList[2], 'funds': str(snspfd[2]), 'server': "CLT2", 'types': 'eleven'}
-                    logQueue.put(dataToAudit)
-
-                    result = dataList[2]+','+snspfd[0]+','+str(snspfd[1])+','+str(snspfd[2])+','+str(newFunds)
-
-                    return result
-
-                else:
-                    return "ERROR USER OWN AMOUNT NOT ENOUGH!"
+                return result
 
             else:
-                return "ERROR OVER COMMIT TIME!"
+                return "ERROR USER OWN AMOUNT NOT ENOUGH!"
 
         else:
-            return "ERROR SELL COMMAND NOT FIND!"
+            newdata = stockname + ',' + dataList[2] + '\r'
+            dataFromQuote = sendToQuote(newdata).strip().split(',')
+
+            currFunds =  Decimal(getkAcountFunds(mycursor, mydb, dataList[2]))
+            ownStockAmount = Decimal(dataFromQuote[0]) * Decimal(stockAmount)
+
+            if ownStockAmount >= Decimal(sellDataFromRedis[2]):
+
+                amountCanSell = int(Decimal(sellDataFromRedis[2]) / Decimal(dataFromQuote[0]))
+                moneyCanGet = amountCanSell * Decimal(dataFromQuote[0])
+                newFunds = currFunds + moneyCanGet
+                shareLeft = stockAmount - amountCanSell
+
+                updateStockAmount(mycursor, mydb, dataList[2], stockname, shareLeft)
+                dbLogs(mycursor, mydb, (dataList[2], sellDataFromRedis[0], dataList[1], stockname, dataFromQuote[0], sellDataFromRedis[2], currFunds, getCurrTimestamp(), None))
+                updateFunds(mycursor, mydb, dataList[2], newFunds)
+
+                #trans,command,username,funds,server,types:accountTransaction-add(11)
+                #dataToAudit = ",".join([dataList[0],'add',dataList[2],str(snspfd[2]),"CLT2","eleven"])
+                dataToAudit = {'trans': dataList[0], 'action': 'add', 'username': dataList[2], 'funds': sellDataFromRedis[2], 'server': "CLT2", 'types': 'eleven'}
+                logQueue.put(dataToAudit)
+
+                result = dataList[2]+','+stockname+','+dataFromQuote[0]+','+sellDataFromRedis[2]+','+str(newFunds)
+
+                return result
+
+            else:
+                return "ERROR USER OWN AMOUNT NOT ENOUGH!"
 
     elif dataList[1] == "CANCEL_SELL":
+        stockname = redClient.rpop('S_'+dataList[2])
+        sellDataFromRedis = redClient.hvals('S_'+dataList[2]+'_'+str(stockname)) #data --trans, command, moneyAmount
 
-        result = deleteBuySellLogs(mycursor, mydb, dataList[2],'SELL')
-        if result == 1:
+        if stockname != None or sellDataFromRedis != []:
+            redClient.delete('S_'+dataList[2]+'_'+str(stockname))
             #trans,command,username,server,types:userCommand-cancelBuy(4)
             #dataToAudit = ",".join([data,"CLT2","four"])
             dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'server': "CLT2", 'types': 'four'}
@@ -881,6 +776,7 @@ def commandControl(data, cSocket, redClient):
         #dataToAudit = ",".join([data,"CLT4","four"])
         dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'server': "CLT4", 'types': 'four'}
         logQueue.put(dataToAudit)
+
         result = getSummary(mycursor, mydb, dataList[2])
         cSocket.sendall(result.encode())
         return "the end"
@@ -914,11 +810,11 @@ def commandControl(data, cSocket, redClient):
         return "Trigger is hit running..."
 
     elif dataList[1] == "CANCEL_SET_BUY":
-
-        result = deleteTriggerFromDB(mycursor, mydb, dataList[2], dataList[3], 'SET_BUY_TRIGGER')
+        key = 'Btri_'+dataList[2]+'_'+dataList[3]
+        btriDataFromRedis = redClient.get(key)
         diName = dataList[2]+'-'+dataList[3]
 
-        if result == 1 and diName in buyTriggerQueue:
+        if btriDataFromRedis != None and diName in buyTriggerQueue:
             #trans,command,username,stockname,server,types:userCommand-cancelSetBuy(5)
             #dataToAudit = ",".join([data,"CLT3","five"])
             dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'server': "CLT3", 'types': 'five'}
@@ -944,7 +840,6 @@ def commandControl(data, cSocket, redClient):
             return "NO BUY TRIGGER"
 
     elif dataList[1] == "SET_BUY_TRIGGER":
-
         #trans,command,username,stockname,stockprice,server,types:userCommand-setBuyTrigger(6)
         #dataToAudit = ",".join([data,"CLT3","six"])
         dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'funds': dataList[4], 'server': "CLT3", 'types': 'six'}
@@ -955,10 +850,7 @@ def commandControl(data, cSocket, redClient):
         dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'funds': dataList[4], 'server': "HSD3", 'types': 'thirteen'}
         logQueue.put(dataToAudit)
 
-        if checkIsTrigger(mycursor, mydb, dataList[2], dataList[3], dataList[1]) == 1:
-            updateTrigger(mycursor, mydb, dataList[2], dataList[3], dataList[1], dataList[4])
-        else:
-            addToTriggerDB(mycursor, mydb, (dataList[2], dataList[3], dataList[1], dataList[4], getCurrTimestamp()))
+        triDataFromRedis = redClient.set(('Btri_'+dataList[2]+'_'+dataList[3]), dataList[4])
 
         return "SET BUY TRIGGER!"
 
@@ -991,7 +883,6 @@ def commandControl(data, cSocket, redClient):
         return "Trigger is hit running..."
 
     elif dataList[1] == "SET_SELL_TRIGGER":
-
         #trans,command,username,stockname,stockprice,server,types:userCommand-setSellTrigger(6)
         #dataToAudit = ",".join([data,"CLT3","three"])
         dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'funds': dataList[4], 'server': "CLT3", 'types': 'three'}
@@ -1002,18 +893,16 @@ def commandControl(data, cSocket, redClient):
         dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'funds': dataList[4], 'server': "HSD3", 'types': 'thirteen'}
         logQueue.put(dataToAudit)
 
-        if checkIsTrigger(mycursor, mydb, dataList[2], dataList[3], dataList[1]) == 1:
-            updateTrigger(mycursor, mydb, dataList[2], dataList[3], dataList[1], dataList[4])
-        else:
-            addToTriggerDB(mycursor, mydb, (dataList[2], dataList[3], dataList[1], dataList[4], getCurrTimestamp()))
+        triDataFromRedis = redClient.set(('Stri_'+dataList[2]+'_'+dataList[3]), dataList[4])
 
         return "SET SELL TRIGGER!"
 
     elif dataList[1] == "CANCEL_SET_SELL":
-
-        result = deleteTriggerFromDB(mycursor, mydb, dataList[2], dataList[3], 'SET_SELL_TRIGGER')
+        key = 'Stri_'+dataList[2]+'_'+dataList[3]
+        striDataFromRedis = redClient.get(key)
         diName = dataList[2]+'-'+dataList[3]
-        if result == 1 and diName in sellTriggerQueue:
+
+        if striDataFromRedis != None and diName in sellTriggerQueue:
             #trans,command,username,stockname,server,types:userCommand-cancelSetSell(5)
             #dataToAudit = ",".join([data,"CLT3","five"])
             dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'server': "CLT3", 'types': 'five'}
@@ -1073,6 +962,7 @@ if __name__ == '__main__':
 
     pool = redis.ConnectionPool(host="localhost", port=6379, decode_responses=True)
     redClient = redis.Redis(connection_pool=pool)
+    redClient.flushall()
 
     recvFromHttp(sSocket, redClient)
 

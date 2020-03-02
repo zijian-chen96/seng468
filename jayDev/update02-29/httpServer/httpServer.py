@@ -13,7 +13,7 @@ filename5 = "100User_testWorkLoad"
 
 
 def readFile():
-    alist = [line.rstrip().split(' ')[1] for line in open(filename0)]
+    alist = [line.rstrip().split(' ')[1] for line in open(filename3)]
     sendToTrans(alist)
 
 def sendToTrans(alist):
