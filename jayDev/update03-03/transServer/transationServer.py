@@ -196,8 +196,8 @@ def sendToQuote(data):
     fromUser = data
     quoteServerSocket = socket(AF_INET,SOCK_STREAM)
 
-    #uoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
-    quoteServerSocket.connect(('192.168.0.10',44433))
+    quoteServerSocket.connect(('quoteserve.seng.uvic.ca',4447))
+    #quoteServerSocket.connect(('192.168.0.10',44433))
 
     quoteServerSocket.send(fromUser.encode())
 
@@ -208,7 +208,7 @@ def sendToQuote(data):
     return dataFromQuote
 
 
-def recvFromHttp(redClient, i):
+def recvFromHttp(redClient, i, currName):
 
     mydb = mysql.connector.connect(
         host="localhost",
@@ -224,10 +224,10 @@ def recvFromHttp(redClient, i):
         try:
 
             #data = cSocket.recv(1024).decode()
-            if jobQueue.empty() != True:
-                lock.acquire()
-                data = jobQueue.get()
-                lock.release()
+            if len(queueDic.get(currName)) > 0:
+                #lock.acquire()
+                data = queueDic.get(currName).pop(0)
+                #lock.release()
                 print("Thread #" +str(i)+ " " + getCurrTimestamp()+ " " + "Data recv from HTTP Server: " + data)
 
                 dataFromQuote = commandControl(mydb, mycursor, data, redClient)
@@ -238,9 +238,11 @@ def recvFromHttp(redClient, i):
 
                 #cSocket.sendall(dataFromQuote.encode())
                 #httpSocket.sendall(dataFromQuote.encode())
+            else:
+                break
 
         except:
-            print('ERROR during processing...')
+            print('ERROR during processing...' + ' ' + str(i))
             sys.exit()
 
 
@@ -980,29 +982,32 @@ if __name__ == '__main__':
     global logQueue
     global jobQueue
     global finQueue
+    global queueDic
 
     global buyTriggerQueue
     global sellTriggerQueue
 
     global lock
 
-    lock= threading.Lock()
+    lock = threading.Lock()
 
     #{username-stockname:buyTrigger}
     buyTriggerQueue = {}
     #{username-stockname:sellTrigger}
     sellTriggerQueue = {}
 
+    queueDic = {}
+
     #thread 2 only use to sent the log to AuditServer
-    logQueue = queue.Queue(maxsize = 100000)
-    jobQueue = queue.Queue(maxsize = 100000)
-    finQueue = queue.Queue(maxsize = 100000)
+    logQueue = queue.Queue(maxsize = 1000000)
+    jobQueue = queue.Queue(maxsize = 1000000)
+    finQueue = queue.Queue(maxsize = 1000000)
 
     AuditServer = AuditServer(time, logQueue)
     AuditServer.start()
 
-    recvThread = threading.Thread(target = recvJob)
-    recvThread.start()
+    # recvThread = threading.Thread(target = recvJob)
+    # recvThread.start()
     sendThread = threading.Thread(target = sendJob)
     sendThread.start()
 
@@ -1026,17 +1031,49 @@ if __name__ == '__main__':
     redClient.flushall()
 
 
-    a = []
-    for i in range(5):
-        th = threading.Thread(target = recvFromHttp, args=(redClient, i,))
-        th.start()
-        a.append(th)
+    sSocket = socket(AF_INET, SOCK_STREAM)
+    port = 50000
+    sSocket.bind(('',port))
+    sSocket.listen(5)
+    cSocket, addr = sSocket.accept()
+
+    currName = ""
+    threadCount = 0
+    while True:
+        data = cSocket.recv(1024).decode()
+        username = data.split(',')[2]
+        if data == "finish":
+            break
+        #check username != currName start thread and run last commandList and create new list store the data commands
+        #update commandList for next user.
+        elif currName == "":
+            currName = username
+            queueDic.update({currName:[data]})
+        elif username != currName:
+            threadCount += 1
+            th = threading.Thread(target=recvFromHttp, args=(redClient, threadCount, currName,))
+            th.start()
+            currName = username
+            queueDic.update({currName:[data]})
+
+        elif username == currName:
+            queueDic.get(currName).append(data)
+
+        cSocket.send(("ok").encode())
+            #cSocket.close()
+
+
+
+    # for i in range(5):
+    #     th = threading.Thread(target = recvFromHttp, args=(redClient, i,))
+    #     th.start()
+    #     a.append(th)
 
     # recvFromHttp(redClient, main)
 
-    while True:
-        time.sleep(5)
-        print(jobQueue.qsize())
+    # while True:
+    #     time.sleep(5)
+    #     print(jobQueue.qsize())
 
     AuditServer.join()
     recvThread.join()

@@ -10,7 +10,7 @@ filename2 = "user2.txt"
 filename3 = "user10.txt"
 filename4 = "user45.txt"
 filename5 = "100User_testWorkLoad"
-filename6 = "workload45.txt"
+filename6 = "workload10.txt"
 
 def recvFromTrans():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

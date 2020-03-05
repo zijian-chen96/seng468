@@ -369,7 +369,7 @@ def getCurrTimestamp():
     return str(int(float(timestampStr) * 1000))
 
 if __name__=="__main__":
-    logQueue = queue.Queue(maxsize = 10000)
+    logQueue = queue.Queue(maxsize = 1000000)
 
     logServer = logServer(logQueue)
     logServer.start()
