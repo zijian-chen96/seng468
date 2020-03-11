@@ -1,0 +1,37 @@
+version: "3"
+
+services:
+  db:
+    build: db/
+    command: python ./DBGood.py
+    network_mode: host
+
+  auditserver:
+    build: auditServer/
+    command: python ./auditServer.py
+    network_mode: host
+    ports:
+      - 51000:51000
+    depends_on:
+      - db
+
+  transserver:
+    build: transServer/
+    command: python -u ./transationServer.py
+    network_mode: host
+    ports:
+      - 50000:50000
+    depends_on:
+      - db
+      - auditserver
+
+  httpserver:
+    build: httpServer/
+    command: python ./httpServer.py
+    network_mode: host
+    ports:
+      - 52000:52000
+    depends_on:
+      - db
+      - auditserver
+      - transserver
