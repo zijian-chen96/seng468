@@ -14,3 +14,5 @@ The system must contains the following functions:
 • Review their complete list of transactions.<br>
 • Cancel a specified transaction prior to it being committed.<br>
 • Commit a transaction.<br>
+
+"docker swarm join --token SWMTKN-1-103tpi6fu2eif39o36wk8cfswsy1gxfnxdj5c4ioyuphqyto1y-95es0vbt6xqdts1vrna28qqq8 192.168.1.198:2377"
