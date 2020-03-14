@@ -1,0 +1,57 @@
+version: "3"
+
+services:
+
+  mysqldb:
+    image: mysql:latest
+    environment:
+      MYSQL_ROOT_USER: root
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: dbone
+    networks:
+      - simpleserverapp-network
+    ports:
+      - 3306:3306
+
+  myredis:
+    image: redis:latest
+    networks:
+      - simpleserverapp-network
+    ports:
+      - 6379:6379
+
+  # auditserver:
+  #   image: micejian/audit-server:1.0
+  #   command: python3 ./auditServer.py
+  #   networks:
+  #     - simpleserverapp-network
+  #   ports:
+  #     - 51000:51000
+
+  transactionserver:
+    image: micejian/transaction-server:1.0
+    command: python3 ./transationServer.py
+    networks:
+      - simpleserverapp-network
+    ports:
+      - 50000:50000
+    deploy:
+      replicas: 1
+    depends_on:
+      - mysqldb
+      - myredis
+      #- auditserver
+
+  visualizer:
+    image: dockersamples/visualizer:latest
+    ports:
+      - 8080:8080
+    stop_grace_period: 1m30s
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+
+networks:
+  simpleserverapp-network:
