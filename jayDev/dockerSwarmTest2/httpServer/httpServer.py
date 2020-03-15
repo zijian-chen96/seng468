@@ -3,6 +3,7 @@ import readline
 import socket
 import time
 import threading
+import mysql.connector
 
 filename0 = "example.txt"
 filename = "user1.txt"
@@ -19,11 +20,14 @@ def recvFromTrans():
 
 
     while True:
-        cSocket, addr = s.accept()
-        #print("waiting server send back messages......")
-        data = cSocket.recv(10240).decode()
-        print(data)
-        cSocket.close()
+        try:
+            cSocket, addr = s.accept()
+            #print("waiting server send back messages......")
+            data = cSocket.recv(10240).decode()
+            print(data)
+            cSocket.close()
+        except:
+            continue
         #cSocket.sendall(('ok').encode())
 
 
@@ -68,9 +72,7 @@ def recvFromTrans():
 
 
 def sendToTrans():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(('',50000))
-    alist = [line.rstrip().split(' ')[1] for line in open(filename4)]
+    alist = [line.rstrip().split(' ')[1] for line in open(filename5)]
 
     transNum = 0
     userCommandDic = {}
@@ -87,20 +89,20 @@ def sendToTrans():
 
 
     for value in userCommandDic.values():
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect(('',50000))
         value = '\n'.join(value)
-
-        #print('newData send -- ' + newData)
+        # print(userCommandDic.keys())
         s.sendall(value.encode())
         s.sendall(('the end').encode())
-        data = s.recv(1024).decode()
 
-    s.send(("finish").encode())
     s.close()
 
 if __name__=="__main__":
-    # th = threading.Thread(target=recvFromTrans)
-    # th.start()
+
+    th = threading.Thread(target=recvFromTrans)
+    th.start()
 
     sendToTrans()
 
-    # th.join()
+    th.join()

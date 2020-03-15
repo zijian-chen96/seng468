@@ -5,6 +5,7 @@ from datetime import datetime
 import json
 import queue
 import threading
+import mysql.connector
 #xmllint --schema logfile.xsd --noout logsfile.xml
 
 
@@ -24,15 +25,15 @@ class logServer(threading.Thread):
         #print('accepted')
 
         try:
-            connection, addr = sSocket.accept()
             while True:
+                connection, addr = sSocket.accept()
                 transactions = ""
                 transactions = connection.recv(1024).decode()
                 if transactions != "":
                     #print(str(transactions))
                     transactionsDic = json.loads(transactions)
                     self.logQueue.put(transactionsDic)
-                connection.sendall(('OK').encode())
+                connection.close()
         except:
             print('error 11')
             connection.send("error")
@@ -42,8 +43,34 @@ class logServer(threading.Thread):
         sSocket.close()
 
 
+def DBGood():
+    mydb = mysql.connector.connect(
+        host="mysqldb",
+        port=3306,
+        user="root",
+        password="rootpassword",
+        database="dbone"
+    )
+
+    mycursor = mydb.cursor()
+    mycursor.execute("DROP TABLE IF EXISTS acounts")
+    mycursor.execute("DROP TABLE IF EXISTS stocks")
+    mycursor.execute("DROP TABLE IF EXISTS logs")
+    mydb.commit()
+
+    mycursor.execute("CREATE TABLE acounts (username VARCHAR(255) PRIMARY KEY, funds DECIMAL(10,2))")
+    mycursor.execute("CREATE TABLE stocks (username VARCHAR(255), stockname VARCHAR(255), amount DECIMAL(10,2))")
+    mycursor.execute("CREATE TABLE logs (username VARCHAR(255), transnumber INTEGER(10), command VARCHAR(255), stockname VARCHAR(255), stockprice DECIMAL(10,2), amount DECIMAL(10,2), funds DECIMAL(10,2), times BIGINT(15), cryptokey VARCHAR(255))")
+    mycursor.execute("SHOW TABLES")
+    for db in mycursor:
+        print(db)
+    mycursor.close()
+    mydb.close()
+
+
 def main():
     #xml_str = root.toprettyxml()
+    DBGood()
 
     save_path_file = "logsfile.xml"
 
@@ -60,7 +87,7 @@ def main():
             node = detTag(transactionsDic)
             with open('logsfile.xml', 'ab') as f:
                 f.write(node.encode())
-                
+
 
 def detTag(data): #determine the tag of the input
     tag = ''

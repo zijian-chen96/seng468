@@ -24,18 +24,16 @@ class AuditServer(threading.Thread):
         self.time = time
 
     def run(self):
-        auditSocket = socket(AF_INET, SOCK_STREAM)
-        auditSocket.connect(('',51000))
 
         while True:
             if self.logQueue.empty() != True:
 
+                auditSocket = socket(AF_INET, SOCK_STREAM)
+                auditSocket.connect(('auditserver',51000))
                 data = self.logQueue.get()
                 #print("This data must send to aduit server: " + str(data))
                 data = json.dumps(data)
                 auditSocket.sendall(data.encode())
-
-                auditSocket.recv(1024)
 
         auditSocket.close()
 
@@ -175,10 +173,10 @@ def sendJob():
     while True:
         if finQueue.empty() != True:
             httpSocket = socket(AF_INET, SOCK_STREAM)
-            httpSocket.connect(('',52000))
+            httpSocket.connect(('192.168.1.198',52000))
             data = finQueue.get()
             httpSocket.sendall(data.encode())
-            httpSocket.recv(1024)
+            #httpSocket.recv(1024)
 
     # while True:
     #     if finQueue.empty() != True:
@@ -534,8 +532,8 @@ def commandControl(mydb, mycursor, data, redClient):
             dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'server': "CLT1", 'timestamp': getCurrTimestamp(), 'types': 'two'}
             logQueue.put(dataToAudit)
             #trans,command,userid,stockname,stockprice,timestamp,cryptokey,server,types:quoteServer(9)
-            #dataToAudit = ",".join([data,dataFromQuote[0],dataFromQuote[3],dataFromQuote[4],"QSRV1","nine"])
-            #dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'price': dataFromQuote[0],'quoteServerTime': dataFromQuote[3],'cryptokey': dataFromQuote[4] , 'server': "QSRV1", 'timestamp': getCurrTimestamp(), 'types': 'nine'}
+            dataToAudit = ",".join([data,dataFromQuote[0],dataFromQuote[3],dataFromQuote[4],"QSRV1","nine"])
+            dataToAudit = {'trans': dataList[0], 'command': dataList[1], 'username': dataList[2], 'stockname': dataList[3], 'price': dataFromQuote[0],'quoteServerTime': dataFromQuote[3],'cryptokey': dataFromQuote[4]+'\n' , 'server': "QSRV1", 'timestamp': getCurrTimestamp(), 'types': 'nine'}
             #logQueue.put(dataToAudit)
 
             return result
@@ -1022,13 +1020,13 @@ if __name__ == '__main__':
     jobQueue = queue.Queue(maxsize = 1000000)
     finQueue = queue.Queue(maxsize = 1000000)
 
-    # AuditServer = AuditServer(time, logQueue)
-    # AuditServer.start()
+    AuditServer = AuditServer(time, logQueue)
+    AuditServer.start()
 
     # recvThread = threading.Thread(target = recvJob)
     # recvThread.start()
-    # sendThread = threading.Thread(target = sendJob)
-    # sendThread.start()
+    sendThread = threading.Thread(target = sendJob)
+    sendThread.start()
 
     pool = redis.ConnectionPool(host="myredis", port=6379, decode_responses=True)
     redClient = redis.Redis(connection_pool=pool)
@@ -1039,15 +1037,14 @@ if __name__ == '__main__':
     port = 50000
     sSocket.bind(('',port))
     sSocket.listen(5)
-    cSocket, addr = sSocket.accept()
 
-    executor = ThreadPoolExecutor(max_workers = 30)
+    executor = ThreadPoolExecutor(max_workers = 45)
 
     currName = ""
     threadCount = 0
     while True:
         try:
-
+            cSocket, addr = sSocket.accept()
             data = ""
             while True:
                 newData = cSocket.recv(1024).decode()
@@ -1058,9 +1055,8 @@ if __name__ == '__main__':
 
             dList = data.split('\n')
             threadCount += 1
-            print(dList)
             future = executor.submit(recvFromHttp, redClient, dList, threadCount)
-            cSocket.sendall(('OK').encode())
+            cSocket.close()
         except:
             continue
 
