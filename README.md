@@ -1,4 +1,4 @@
-**<centre><h1> seng468 </h1></centre>**
+**<centre><h1> Seng468 </h1></centre>**
 <h2>Scalable Day Trading System</h2>
 <h3>Initial Requirements</h3>
 
