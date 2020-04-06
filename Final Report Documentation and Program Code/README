@@ -1,0 +1,30 @@
+Program Requrements
+  1. python Latest Version
+  2. Docker Support
+  3. Docker Swarm
+  4. Mysql Database Server Latest Version
+  5. Redis Server Latest Version
+
+Before run the program need to do the following steps.
+STEP 1:
+  - create manager node:  sudo docker swarm init --advertise-addr [ip address]
+  - to add worker node by type the join command: ---
+
+STEP 2:
+  - create docker service by use docker stack deploy: sudo docker stack deploy -c docker-compose.yml [app name]
+  - run the http python file on the manager node: python3 httpServer.py
+
+DOCKER SWARM COMMANDS:
+  - remove images: sudo docker rmi [image name]
+  - build the docker image command: sudo docker: sudo docker build -t micejian/[filename]:1.0 .
+  - push the image to docker hub: sudo docker push micejian/[filename]:1.0
+  - list the docker service command: sudo docker service ls
+  - remove the docker service command: sudo docker service rm [service name]
+  - display docker service log command: sudo docker service logs [service name]
+  - create the single docker service command: sudo docker service create --replicas 2 -p [port on localhost]:[port in side docker] --name [app name] micejian/[server name]:1.0
+
+To Run The Program Need To Run the Commands On The Manager Node
+The following command only able use  in the lab machines any other machines will not be works
+The port may different we may need to modify the ip address and port number binding on the TCP connections
+  sudo docker stack deploy -c docker-compose.yml [app name]
+  sudo python3 httpServer.py
